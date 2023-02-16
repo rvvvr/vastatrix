@@ -13,9 +13,9 @@ fn main() {
     let mut class = vastatrix::class::Class::new(Bytes::from(buffer));
     println!("{:?}", class);
     let mut add_frame = class.frame("add".to_string(), vec![10, 5]);
-    let mut sub_frame = class.frame("subtract".to_string(), vec![5, 3]);
-    let mut mul_frame = class.frame("multiply".to_string(), vec![6, 4]);
-    let mut div_frame = class.frame("divide".to_string(), vec![10, 2]);
+    let mut sub_frame = class.frame("sub".to_string(), vec![5, 3]);
+    let mut mul_frame = class.frame("mul".to_string(), vec![6, 4]);
+    let mut div_frame = class.frame("div".to_string(), vec![10, 2]);
     let add_result = add_frame.exec();
     let sub_result = sub_frame.exec();
     let mul_result = mul_frame.exec();

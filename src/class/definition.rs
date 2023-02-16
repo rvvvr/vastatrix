@@ -233,6 +233,7 @@ impl Class {
                     if self.resolve(attribute.attribute_name_index).unwrap() == "Code" && attribute.attribute_length > 8 {
                         return Frame {
                             class: self.clone(),
+                            method: m,
                             code: attribute.info[8..].to_vec(),
                             ip: 0,
                             locals: args.clone(),
