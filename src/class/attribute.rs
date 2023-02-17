@@ -1,8 +1,9 @@
 use bytes::{Bytes, Buf};
 
-use super::Class;
+use super::{Class, ConstantsPoolInfo};
 
 
+#[derive(Debug, Clone)]
 pub enum Attribute {
     ConstantValue { common: AttributeCommon, constantvalue_index: u16 },
     Code { common: AttributeCommon, max_stack: u16, max_locals: u16, code_length: u32, code: Vec<u8>, exception_table_length: u16, exception_table: Vec<ExceptionTableEntry>, attribute_count: u16, attribute_info: Vec<Attribute> },
@@ -36,6 +37,7 @@ pub enum Attribute {
     PermittedSubclasses { common: AttributeCommon, number_of_classes: u16, classes: Vec<u16> }
 }
 
+#[derive(Debug, Clone)]
 pub struct ExceptionTableEntry {
     pub start_pc: u16,
     pub end_pc: u16,
@@ -43,6 +45,7 @@ pub struct ExceptionTableEntry {
     pub catch_type: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct InnerClassesEntry {
     pub inner_class_info_index: u16,
     pub outer_class_info_index: u16,
@@ -50,11 +53,13 @@ pub struct InnerClassesEntry {
     pub inner_class_access_flags: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct LineNumberTableEntry {
     pub start_pc: u16,
     pub line_number: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct LocalVariableTableEntry {
     pub start_pc: u16,
     pub length: u16,
@@ -63,6 +68,7 @@ pub struct LocalVariableTableEntry {
     pub index: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct LocalVariableTypeTableEntry {
     pub start_pc: u16,
     pub length: u16,
@@ -71,38 +77,45 @@ pub struct LocalVariableTypeTableEntry {
     pub index: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct Annotation {
     pub type_index: u16,
     pub num_element_value_pairs: u16,
     // fuck this
 }
 
+#[derive(Debug, Clone)]
 pub struct ParameterAnnotation {
     pub num_annotations: u16,
     pub annotations: Vec<Annotation>,
 }
 
+#[derive(Debug, Clone)]
 pub struct TypeAnnotation {
     //todo
 }
 
+#[derive(Debug, Clone)]
 pub struct BootstrapMethod {
     pub bootstrap_method_ref: u16,
     pub num_bootstrap_arguments: u16,
     pub bootstrap_arguments: Vec<u16>,
 }
 
+#[derive(Debug, Clone)]
 pub struct Parameter {
     pub name_index: u16,
     pub access_flags: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct ModuleRequires {
     pub requires_index: u16,
     pub requires_flags: u16,
     pub requires_version_index: u16,
 }
 
+#[derive(Debug, Clone)]
 pub struct ModuleExports {
     pub exports_index: u16,
     pub exports_flags: u16,
@@ -110,6 +123,7 @@ pub struct ModuleExports {
     pub exports_to_index: Vec<u16>
 }
 
+#[derive(Debug, Clone)]
 pub struct ModuleOpens {
     pub opens_index: u16,
     pub opens_flags: u16,
@@ -117,12 +131,14 @@ pub struct ModuleOpens {
     pub opens_to_index: Vec<u16>
 }
 
+#[derive(Debug, Clone)]
 pub struct ModuleProvides {
     pub provides_index: u16,
     pub provides_with_count: u16,
     pub provides_with_index: Vec<u16>,
 }
 
+#[derive(Debug, Clone)]
 pub struct RecordComponentInfo {
     pub name_index: u16,
     pub descriptor_index: u16,
@@ -130,12 +146,13 @@ pub struct RecordComponentInfo {
     pub attributes: Vec<Attribute>,
 }
 
+#[derive(Debug, Clone)]
 pub struct AttributeCommon {
     pub attribute_name_index: u16,
     pub attribute_length: u32,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum AttributeLocation {
     ClassFile,
     FieldInfo,
@@ -144,6 +161,7 @@ pub enum AttributeLocation {
     Code
 }
 
+#[derive(Debug, Clone)]
 pub enum StackMapFrame {
     SameFrame,
     SameLocals1StackItemFrame,
@@ -154,10 +172,12 @@ pub enum StackMapFrame {
     FullFrame
 }
 
+#[derive(Debug, Clone)]
 pub enum VerificationTypeInfo {
     //TODO: this doesn't matter yet.
 }
 
+#[derive(Debug, Clone)]
 pub enum VerificationType {
     //TODO: this also doesnt matter yet
     ItemTop,
@@ -172,13 +192,21 @@ pub enum VerificationType {
 }
 
 impl Attribute {
-    pub fn parse(mut bytes: Bytes, class: Class, common: AttributeCommon, location: AttributeLocation) -> Attribute {
-        match (class.resolve(common.attribute_name_index).unwrap().as_str()) {
+    pub fn parse(mut bytes: Bytes, constants: Vec<ConstantsPoolInfo>, common: AttributeCommon, location: AttributeLocation) -> Attribute {
+        match (Class::resolve(constants.clone(), common.attribute_name_index).unwrap().as_str()) {
             "ConstantValue" => {
+                match location {
+                    AttributeLocation::FieldInfo => {},
+                    _ => panic!("ConstantValue attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let constantvalue_index = bytes.get_u16();
                 Attribute::ConstantValue { common, constantvalue_index }
             },
             "Code" => {
+                match location {
+                    AttributeLocation::MethodInfo => {},
+                    _ => panic!("Code attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let max_stack = bytes.get_u16();
                 let max_locals = bytes.get_u16();
                 let code_length = bytes.get_u32();
@@ -198,14 +226,22 @@ impl Attribute {
                 for _ in 0..attribute_count {
                     let attribute_name_index = bytes.get_u16();
                     let attribute_length = bytes.get_u32();
-                    attribute_info.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), class.clone(), AttributeCommon { attribute_name_index, attribute_length}, location.clone()))
+                    attribute_info.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), constants.clone(), AttributeCommon { attribute_name_index, attribute_length}, AttributeLocation::Code))
                 }
                 Attribute::Code { common, max_stack, max_locals, code_length, code, exception_table_length, exception_table, attribute_count, attribute_info }
             },
             "StackMapTable" => {
+                match location {
+                    AttributeLocation::Code => {},
+                    _ => panic!("StackMapTable attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 todo!("not all the required data types are implemented properly for this");
             },
             "Exceptions" => {
+                match location {
+                    AttributeLocation::MethodInfo => {},
+                    _ => panic!("Exceptions attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let number_of_exceptions = bytes.get_u16();
                 let mut exception_index_table = vec![];
                 for _ in 0..number_of_exceptions {
@@ -215,10 +251,18 @@ impl Attribute {
 
             }
             "SourceFile" => {
+                match location {
+                    AttributeLocation::ClassFile => {},
+                    _ => panic!("SourceFile attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let sourcefile_index = bytes.get_u16();
                 Attribute::SourceFile { common, sourcefile_index }
             },
             "InnerClasses" => {
+                match location {
+                    AttributeLocation::ClassFile => {},
+                    _ => panic!("InnerClasses attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let number_of_classes = bytes.get_u16();
                 let mut classes = vec![];
                 for _ in 0..number_of_classes {
@@ -233,23 +277,43 @@ impl Attribute {
                 Attribute::InnerClasses { common, number_of_classes, classes }
             },
             "Synthetic" => {
+                match location {
+                    AttributeLocation::ClassFile | AttributeLocation::FieldInfo | AttributeLocation::MethodInfo => {},
+                    _ => panic!("Code attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 Attribute::Synthetic { common }
             },
             "Signature" => {
+                match location {
+                    AttributeLocation::Code => {panic!("Code attribute is not allowed in {:?}", location)},
+                    _ => {},
+                } //this could be a macro maybe?
                 let signature_index = bytes.get_u16();
                 Attribute::Signature { common, signature_index }
             }
             "EnclosingMethod" => {
+                match location {
+                    AttributeLocation::ClassFile => {},
+                    _ => panic!("InnerClasses attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let class_index = bytes.get_u16();
                 let method_index = bytes.get_u16();
                 Attribute::EnclosingMethod { common, class_index, method_index }
             },
             "SourceDebugExtension" => {
+                match location {
+                    AttributeLocation::ClassFile => {},
+                    _ => panic!("InnerClasses attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let debug_extension = bytes.clone().take(common.attribute_length as usize).chunk().to_vec();
                 bytes.advance(common.attribute_length as usize);
                 Attribute::SourceDebugExtension { common, debug_extension }
             },
             "LineNumberTable" => {
+                match location {
+                    AttributeLocation::Code => {},
+                    _ => panic!("InnerClasses attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let line_number_table_length = bytes.get_u16();
                 let mut line_number_table = vec![];
                 for _ in 0..line_number_table_length {
@@ -260,6 +324,10 @@ impl Attribute {
                 Attribute::LineNumberTable { common, line_number_table_length, line_number_table }
             },
             "LocalVariableTable" => {
+                match location {
+                    AttributeLocation::Code => {},
+                    _ => panic!("InnerClasses attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let local_variable_table_length = bytes.get_u16();
                 let mut local_variable_table = vec![];
                 for _ in 0..local_variable_table_length {
@@ -273,6 +341,10 @@ impl Attribute {
                 Attribute::LocalVariableTable { common, local_variable_table_length, local_variable_table }
             },
             "LocalVariableTypeTable" => {
+                match location {
+                    AttributeLocation::Code => {},
+                    _ => panic!("InnerClasses attribute is not allowed in {:?}", location),
+                } //this could be a macro maybe?
                 let local_variable_type_table_length = bytes.get_u16();
                 let mut local_variable_type_table = vec![];
                 for _ in 0..local_variable_type_table_length {

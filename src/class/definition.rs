@@ -2,7 +2,7 @@ use std::fmt::Error;
 
 use bytes::{Bytes, Buf};
 
-use crate::frame::Frame;
+use crate::{frame::Frame, class::attribute::{AttributeCommon, Attribute}};
 
 #[derive(Debug, Clone)]
 pub struct Class {
@@ -21,7 +21,7 @@ pub struct Class {
     pub methods_count: u16,
     pub methods: Vec<MethodInfo>,
     pub attribute_count: u16,
-    pub attributes: Vec<AttributeInfo>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[repr(u8)]
@@ -52,7 +52,7 @@ pub struct FieldInfo {
     pub name_index: u16,
     pub descriptor_index: u16,
     pub attribute_count: u16,
-    pub attribute_info: Vec<AttributeInfo>,
+    pub attribute_info: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ pub struct MethodInfo {
     pub name_index: u16,
     pub descriptor_index: u16,
     pub attribute_count: u16,
-    pub attribute_info: Vec<AttributeInfo>,
+    pub attribute_info: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone)]
@@ -165,11 +165,13 @@ impl Class {
             for _ in 0..attribute_count {
                 let attribute_name_index = bytes.get_u16();
                 let attribute_length = bytes.get_u32();
-                let mut info = vec![];
-                for _ in 0..attribute_length {
-                    info.push(bytes.get_u8());
-                }
-                attribute_info.push(AttributeInfo {attribute_name_index, attribute_length, info});
+                let common = AttributeCommon { attribute_name_index, attribute_length};
+                attribute_info.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), constant_pool.clone(), common, crate::class::attribute::AttributeLocation::FieldInfo))
+            // let mut info = vec![];
+                // for _ in 0..attribute_length {
+                //     info.push(bytes.get_u8());
+                // }
+                // attribute_info.push(AttributeInfo {attribute_name_index, attribute_length, info});
             }
             fields.push(FieldInfo {
                 access_flags: aflags,
@@ -190,12 +192,15 @@ impl Class {
             for _ in 0..attribute_count {
                 let attribute_name_index = bytes.get_u16();
                 let attribute_length = bytes.get_u32();
-                let mut info = vec![];
-                for _ in 0..attribute_length {
-                    info.push(bytes.get_u8());
-                }
-                attribute_info.push(AttributeInfo {attribute_name_index, attribute_length, info});
+                let common = AttributeCommon { attribute_name_index, attribute_length};
+                attribute_info.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), constant_pool.clone(), common, crate::class::attribute::AttributeLocation::MethodInfo))
+            // let mut info = vec![];
+                // for _ in 0..attribute_length {
+                //     info.push(bytes.get_u8());
+                // }
+                // attribute_info.push(AttributeInfo {attribute_name_index, attribute_length, info});
             }
+            println!("method info: {:?}", attribute_info);
             methods.push(MethodInfo {
                 access_flags: aflags,
                 name_index: namedex,
@@ -209,17 +214,19 @@ impl Class {
         for _ in 0..attribute_count {
             let attribute_name_index = bytes.get_u16();
             let attribute_length = bytes.get_u32();
-            let mut info = vec![];
-            for _ in 0..attribute_length {
-                info.push(bytes.get_u8());
-            }
-            attributes.push(AttributeInfo {attribute_name_index, attribute_length, info});
+            let common = AttributeCommon { attribute_name_index, attribute_length};
+            attributes.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), constant_pool.clone(), common, crate::class::attribute::AttributeLocation::ClassFile))
+            // let mut info = vec![];
+            // for _ in 0..attribute_length {
+            //     info.push(bytes.get_u8());
+            // }
+            // attributes.push(AttributeInfo {attribute_name_index, attribute_length, info});
         }
         Self { magic, minor, major, constant_count, constant_pool, access_flags, this_class, super_class, interfaces_count, interfaces, fields_count, fields, methods_count, methods, attribute_count, attributes }
     }
 
-    pub fn resolve(&self, index: u16) -> Result<String, ()> {
-        if let ConstantsPoolInfo::Utf8 { bytes, .. } = &self.constant_pool[index as usize - 1] {
+    pub fn resolve(constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()> {
+        if let ConstantsPoolInfo::Utf8 { bytes, .. } = &constant_pool[index as usize - 1] {
             Ok(bytes.to_string())
         } else {
             Err(())
@@ -228,13 +235,13 @@ impl Class {
 
     pub fn frame(&mut self, m: String, args: Vec<u8>) -> Frame {
         for method in &self.methods {
-            if self.resolve(method.name_index).unwrap() == m {
+            if Self::resolve(self.constant_pool.clone(), method.name_index).unwrap() == m {
                 for attribute in &method.attribute_info {
-                    if self.resolve(attribute.attribute_name_index).unwrap() == "Code" && attribute.attribute_length > 8 {
+                    if let Attribute::Code { common, max_stack, max_locals, code_length, code, exception_table_length, exception_table, attribute_count, attribute_info } = attribute {
                         return Frame {
                             class: self.clone(),
                             method: m,
-                            code: attribute.info[8..].to_vec(),
+                            code: code.clone(),
                             ip: 0,
                             locals: args.clone(),
                             stack: vec![]
