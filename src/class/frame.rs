@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::class::Class;
 
 pub struct Frame {
@@ -6,7 +8,7 @@ pub struct Frame {
     pub ip: u32,
     pub code: Vec<u8>,
     pub locals: Vec<i32>,
-    pub stack: Vec<i32>,
+    pub stack: VecDeque<i32>,
 }
 
 impl Frame {
@@ -22,122 +24,94 @@ impl Frame {
             match op {
                 0x2 => {
                     // iconst_m1
-                    let mut thing = vec![-1];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(-1);
                 }
                 0x3 => {
                     //iconst_0
-                    let mut thing = vec![0];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(0);
                 }
                 0x4 => {
                     // iconst_1
-                    let mut thing = vec![1];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(1);
                 }
                 0x5 => {
                     // iconst_2
-                    let mut thing = vec![2];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(2);
                 }
                 0x6 => {
                     // iconst_3
-                    let mut thing = vec![3];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(3);
                 }
                 0x7 => {
-                    let mut thing = vec![4];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(4);
                 }
                 0x8 => {
-                    let mut thing = vec![5];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(5);
                 }
                 0x15 => {
                     self.ip += 1;
-                    let mut thing = vec![self.locals[self.code[self.ip as usize] as usize]];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(self.locals[self.code[self.ip as usize] as usize]);
                 }
                 0x1a => {
                     //iload_0
-                    let mut thing = vec![self.locals[0]];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(self.locals[0]);
                 }
                 0x1b => {
                     // iload_1
-                    let mut thing = vec![self.locals[1]];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(self.locals[1]);
                 },
                 0x1c => {
-                    let mut thing = vec![self.locals[2]];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(self.locals[2]);
                 },
                 0x1d => {
-                    let mut thing = vec![self.locals[3]];
-                    thing.append(&mut self.stack);
-                    self.stack = thing;
+                    self.stack.push_back(self.locals[3]);
                 }
                 0x36 => {
                     // istore     index
-                    let value = self.stack.pop().unwrap();
+                    let value = self.stack.pop_front().unwrap();
                     self.ip += 1;
                     self.locals[self.code[self.ip as usize] as usize] = value;
                 }
                 0x3b => {
                     // istore_0
-                    let value = self.stack.pop().unwrap();
+                    let value = self.stack.pop_front().unwrap();
                     self.locals[0] = value;
                 }
                 0x3c => {
-                    let value = self.stack.pop().unwrap();
+                    let value = self.stack.pop_front().unwrap();
                     self.locals[1] = value;
                 }
                 0x3d => {
-                    let value = self.stack.pop().unwrap();
+                    let value = self.stack.pop_front().unwrap();
                     self.locals[2] = value;
                 }
                 0x3e => {
-                    let value = self.stack.pop().unwrap();
+                    let value = self.stack.pop_front().unwrap();
                     self.locals[3] = value;
                 }
                 0x60 => {
                     //iadd
-                    let a = self.stack[n - 1];
-                    let b = self.stack[n - 2];
-                    self.stack[n - 2] = b.wrapping_add(a);
-                    self.stack = self.stack[..n - 1].to_vec();
+                    let a = self.stack.pop_front().unwrap();
+                    let b = self.stack.pop_front().unwrap();
+                    self.stack.push_back(b.wrapping_add(a));
                 }
                 0x64 => {
                     // isub
-                    let a = self.stack[n - 1];
-                    let b = self.stack[n - 2];
-                    self.stack[n - 2] = b.wrapping_sub(a);
-                    self.stack = self.stack[..n - 1].to_vec();
+                    let a = self.stack.pop_front().unwrap();
+                    let b = self.stack.pop_front().unwrap();
+                    self.stack.push_back(b.wrapping_sub(a));
                 }
                 0x68 => {
                     // imul
-                    let a = self.stack[n - 1];
-                    let b = self.stack[n - 2];
-                    self.stack[n - 2] = b.wrapping_mul(a);
-                    self.stack = self.stack[..n - 1].to_vec();
+                    let a = self.stack.pop_front().unwrap();
+                    let b = self.stack.pop_front().unwrap();
+                    self.stack.push_back(b.wrapping_mul(a));
                 }
                 0x6c => {
                     //idiv
-                    let a = self.stack[n - 1];
-                    let b = self.stack[n - 2];
-                    self.stack[n - 2] = b.wrapping_div(a);
-                    self.stack = self.stack[..n - 1].to_vec();
+                    let a = self.stack.pop_front().unwrap();
+                    let b = self.stack.pop_front().unwrap();
+                    self.stack.push_back(b.wrapping_div(a));
                 }
                 0x84 => {
                     let index = self.code[(self.ip + 1) as usize];
@@ -155,13 +129,12 @@ impl Frame {
                 }
                 0xac => {
                     // ireturn
-                    let v = self.stack[n - 1];
-                    self.stack = self.stack[..n - 1].to_vec();
+                    let v = self.stack.pop_front().unwrap();
                     return v;
                 }
                 0xa2 => { // if_icmpge    brancbyte1      branchbyte2
-                    let value1 = self.stack.pop().unwrap();
-                    let value2 = self.stack.pop().unwrap();
+                    let value1 = self.stack.pop_front().unwrap();
+                    let value2 = self.stack.pop_front().unwrap();
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
                     let branchbyte2 = self.code[(self.ip + 2) as usize];
                     if value1 >= value2 {

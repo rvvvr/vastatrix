@@ -356,7 +356,7 @@ impl Class {
                             code: code.clone(),
                             ip: 0,
                             locals,
-                            stack: vec![],
+                            stack: vec![].into(),
                         };
                     }
                 }
