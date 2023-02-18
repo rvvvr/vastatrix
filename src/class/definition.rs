@@ -1,8 +1,10 @@
 use std::fmt::Error;
 
-use bytes::{Bytes, Buf};
+use bytes::{Buf, Bytes};
 
-use crate::{frame::Frame, class::attribute::{AttributeCommon, Attribute}};
+use crate::class::attribute::{Attribute, AttributeCommon};
+
+use super::frame::Frame;
 
 #[derive(Debug, Clone)]
 pub struct Class {
@@ -27,23 +29,67 @@ pub struct Class {
 #[repr(u8)]
 #[derive(Debug, Clone)]
 pub enum ConstantsPoolInfo {
-    Utf8 { length: u16, bytes: String } = 1,
-    Integer { bytes: u32 } = 3,
-    Float { bytes: u32 } = 4,
-    Long { high_bytes: u32, low_bytes: u32 } = 5, 
-    Double { high_bytes: u32, low_bytes: u32 } = 6,
-    Class { name_index: u16 } = 7,
-    String { string_index: u16 } = 8,
-    FieldRef { class_index: u16, name_and_type_index: u16 } = 9,
-    MethodRef { class_index: u16, name_and_type_index: u16 } = 10,
-    InterfaceMethodRef { class_index: u16, name_and_type_index: u16 } = 11,
-    NameAndType { name_index: u16, descriptor_index: u16 } = 12,
-    MethodHandle { reference_kind: u8, reference_index: u16 } = 15,
-    MethodType { descriptor_index: u16 } = 16,
-    Dynamic { bootstrap_method_attr_index: u16, name_and_type_index: u16 } = 17,
-    InvokeDynamic { bootstrap_method_attr_index: u16, name_and_type_index: u16 } = 18,
-    Module { name_index: u16 } = 19,
-    Package { name_index: u16 } = 20,
+    Utf8 {
+        length: u16,
+        bytes: String,
+    } = 1,
+    Integer {
+        bytes: u32,
+    } = 3,
+    Float {
+        bytes: u32,
+    } = 4,
+    Long {
+        high_bytes: u32,
+        low_bytes: u32,
+    } = 5,
+    Double {
+        high_bytes: u32,
+        low_bytes: u32,
+    } = 6,
+    Class {
+        name_index: u16,
+    } = 7,
+    String {
+        string_index: u16,
+    } = 8,
+    FieldRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    } = 9,
+    MethodRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    } = 10,
+    InterfaceMethodRef {
+        class_index: u16,
+        name_and_type_index: u16,
+    } = 11,
+    NameAndType {
+        name_index: u16,
+        descriptor_index: u16,
+    } = 12,
+    MethodHandle {
+        reference_kind: u8,
+        reference_index: u16,
+    } = 15,
+    MethodType {
+        descriptor_index: u16,
+    } = 16,
+    Dynamic {
+        bootstrap_method_attr_index: u16,
+        name_and_type_index: u16,
+    } = 17,
+    InvokeDynamic {
+        bootstrap_method_attr_index: u16,
+        name_and_type_index: u16,
+    } = 18,
+    Module {
+        name_index: u16,
+    } = 19,
+    Package {
+        name_index: u16,
+    } = 20,
 }
 
 #[derive(Debug, Clone)]
@@ -92,55 +138,64 @@ impl Class {
                     bytes.advance(length as usize);
                     let mut str = std::str::from_utf8(bs.chunk()).unwrap().to_string();
                     ConstantsPoolInfo::Utf8 { length, bytes: str }
-                },
-                3 => {
-                    ConstantsPoolInfo::Integer { bytes: bytes.get_u32() }
-                },
-                4 => {
-                    ConstantsPoolInfo::Float { bytes: bytes.get_u32() }
-                },
-                5 => {
-                    ConstantsPoolInfo::Long { high_bytes: bytes.get_u32(), low_bytes: bytes.get_u32() }
-                },
-                6 => {
-                    ConstantsPoolInfo::Double { high_bytes: bytes.get_u32(), low_bytes: bytes.get_u32() }
-                },
-                7 => {
-                    ConstantsPoolInfo::Class { name_index: bytes.get_u16() }
-                },
-                8 => {
-                    ConstantsPoolInfo::String { string_index: bytes.get_u16() }
-                },
-                9 => {
-                    ConstantsPoolInfo::FieldRef { class_index: bytes.get_u16(), name_and_type_index: bytes.get_u16() }
-                },
-                10 => {
-                    ConstantsPoolInfo::MethodRef { class_index: bytes.get_u16(), name_and_type_index: bytes.get_u16() }
-                },
-                11 => {
-                    ConstantsPoolInfo::InterfaceMethodRef { class_index: bytes.get_u16(), name_and_type_index: bytes.get_u16() }
-                },
-                12 => {
-                    ConstantsPoolInfo::NameAndType { name_index: bytes.get_u16(), descriptor_index: bytes.get_u16() }
-                },
-                15 => {
-                    ConstantsPoolInfo::MethodHandle { reference_kind: bytes.get_u8(), reference_index: bytes.get_u16() }
-                },
-                16 => {
-                    ConstantsPoolInfo::MethodType { descriptor_index: bytes.get_u16() }
                 }
-                17 => {
-                    ConstantsPoolInfo::Dynamic { bootstrap_method_attr_index: bytes.get_u16(), name_and_type_index: bytes.get_u16() }
+                3 => ConstantsPoolInfo::Integer {
+                    bytes: bytes.get_u32(),
                 },
-                18 => {
-                    ConstantsPoolInfo::InvokeDynamic { bootstrap_method_attr_index: bytes.get_u16(), name_and_type_index: bytes.get_u16() }
+                4 => ConstantsPoolInfo::Float {
+                    bytes: bytes.get_u32(),
                 },
-                19 => {
-                    ConstantsPoolInfo::Module { name_index: bytes.get_u16() }
+                5 => ConstantsPoolInfo::Long {
+                    high_bytes: bytes.get_u32(),
+                    low_bytes: bytes.get_u32(),
                 },
-                20 => {
-                    ConstantsPoolInfo::Package { name_index: bytes.get_u16() }
-                }
+                6 => ConstantsPoolInfo::Double {
+                    high_bytes: bytes.get_u32(),
+                    low_bytes: bytes.get_u32(),
+                },
+                7 => ConstantsPoolInfo::Class {
+                    name_index: bytes.get_u16(),
+                },
+                8 => ConstantsPoolInfo::String {
+                    string_index: bytes.get_u16(),
+                },
+                9 => ConstantsPoolInfo::FieldRef {
+                    class_index: bytes.get_u16(),
+                    name_and_type_index: bytes.get_u16(),
+                },
+                10 => ConstantsPoolInfo::MethodRef {
+                    class_index: bytes.get_u16(),
+                    name_and_type_index: bytes.get_u16(),
+                },
+                11 => ConstantsPoolInfo::InterfaceMethodRef {
+                    class_index: bytes.get_u16(),
+                    name_and_type_index: bytes.get_u16(),
+                },
+                12 => ConstantsPoolInfo::NameAndType {
+                    name_index: bytes.get_u16(),
+                    descriptor_index: bytes.get_u16(),
+                },
+                15 => ConstantsPoolInfo::MethodHandle {
+                    reference_kind: bytes.get_u8(),
+                    reference_index: bytes.get_u16(),
+                },
+                16 => ConstantsPoolInfo::MethodType {
+                    descriptor_index: bytes.get_u16(),
+                },
+                17 => ConstantsPoolInfo::Dynamic {
+                    bootstrap_method_attr_index: bytes.get_u16(),
+                    name_and_type_index: bytes.get_u16(),
+                },
+                18 => ConstantsPoolInfo::InvokeDynamic {
+                    bootstrap_method_attr_index: bytes.get_u16(),
+                    name_and_type_index: bytes.get_u16(),
+                },
+                19 => ConstantsPoolInfo::Module {
+                    name_index: bytes.get_u16(),
+                },
+                20 => ConstantsPoolInfo::Package {
+                    name_index: bytes.get_u16(),
+                },
                 _ => panic!("invalid constant pool tag {}", tag),
             });
             println!("CONSTANT: {:?}", constant_pool.last().unwrap());
@@ -165,9 +220,17 @@ impl Class {
             for _ in 0..attribute_count {
                 let attribute_name_index = bytes.get_u16();
                 let attribute_length = bytes.get_u32();
-                let common = AttributeCommon { attribute_name_index, attribute_length};
-                attribute_info.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), constant_pool.clone(), common, crate::class::attribute::AttributeLocation::FieldInfo))
-            // let mut info = vec![];
+                let common = AttributeCommon {
+                    attribute_name_index,
+                    attribute_length,
+                };
+                attribute_info.push(Attribute::parse(
+                    bytes.copy_to_bytes(attribute_length as usize),
+                    constant_pool.clone(),
+                    common,
+                    crate::class::attribute::AttributeLocation::FieldInfo,
+                ))
+                // let mut info = vec![];
                 // for _ in 0..attribute_length {
                 //     info.push(bytes.get_u8());
                 // }
@@ -178,7 +241,7 @@ impl Class {
                 name_index: namedex,
                 descriptor_index: descdex,
                 attribute_count,
-                attribute_info
+                attribute_info,
             })
         }
         let methods_count = bytes.get_u16();
@@ -192,9 +255,17 @@ impl Class {
             for _ in 0..attribute_count {
                 let attribute_name_index = bytes.get_u16();
                 let attribute_length = bytes.get_u32();
-                let common = AttributeCommon { attribute_name_index, attribute_length};
-                attribute_info.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), constant_pool.clone(), common, crate::class::attribute::AttributeLocation::MethodInfo))
-            // let mut info = vec![];
+                let common = AttributeCommon {
+                    attribute_name_index,
+                    attribute_length,
+                };
+                attribute_info.push(Attribute::parse(
+                    bytes.copy_to_bytes(attribute_length as usize),
+                    constant_pool.clone(),
+                    common,
+                    crate::class::attribute::AttributeLocation::MethodInfo,
+                ))
+                // let mut info = vec![];
                 // for _ in 0..attribute_length {
                 //     info.push(bytes.get_u8());
                 // }
@@ -206,7 +277,7 @@ impl Class {
                 name_index: namedex,
                 descriptor_index: descdex,
                 attribute_count,
-                attribute_info
+                attribute_info,
             })
         }
         let attribute_count = bytes.get_u16();
@@ -214,15 +285,40 @@ impl Class {
         for _ in 0..attribute_count {
             let attribute_name_index = bytes.get_u16();
             let attribute_length = bytes.get_u32();
-            let common = AttributeCommon { attribute_name_index, attribute_length};
-            attributes.push(Attribute::parse(bytes.copy_to_bytes(attribute_length as usize), constant_pool.clone(), common, crate::class::attribute::AttributeLocation::ClassFile))
+            let common = AttributeCommon {
+                attribute_name_index,
+                attribute_length,
+            };
+            attributes.push(Attribute::parse(
+                bytes.copy_to_bytes(attribute_length as usize),
+                constant_pool.clone(),
+                common,
+                crate::class::attribute::AttributeLocation::ClassFile,
+            ))
             // let mut info = vec![];
             // for _ in 0..attribute_length {
             //     info.push(bytes.get_u8());
             // }
             // attributes.push(AttributeInfo {attribute_name_index, attribute_length, info});
         }
-        Self { magic, minor, major, constant_count, constant_pool, access_flags, this_class, super_class, interfaces_count, interfaces, fields_count, fields, methods_count, methods, attribute_count, attributes }
+        Self {
+            magic,
+            minor,
+            major,
+            constant_count,
+            constant_pool,
+            access_flags,
+            this_class,
+            super_class,
+            interfaces_count,
+            interfaces,
+            fields_count,
+            fields,
+            methods_count,
+            methods,
+            attribute_count,
+            attributes,
+        }
     }
 
     pub fn resolve(constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()> {
@@ -233,18 +329,34 @@ impl Class {
         }
     }
 
-    pub fn frame(&mut self, m: String, args: Vec<u8>) -> Frame {
+    pub fn frame(&mut self, m: String, args: &mut Vec<i32>) -> Frame {
         for method in &self.methods {
             if Self::resolve(self.constant_pool.clone(), method.name_index).unwrap() == m {
                 for attribute in &method.attribute_info {
-                    if let Attribute::Code { common, max_stack, max_locals, code_length, code, exception_table_length, exception_table, attribute_count, attribute_info } = attribute {
+                    if let Attribute::Code {
+                        common,
+                        max_stack,
+                        max_locals,
+                        code_length,
+                        code,
+                        exception_table_length,
+                        exception_table,
+                        attribute_count,
+                        attribute_info,
+                    } = attribute
+                    {
+                        let mut locals: Vec<i32> = vec![];
+                        locals.append(args);
+                        while (locals.len() != *max_locals as usize) {
+                            locals.push(0);
+                        }
                         return Frame {
                             class: self.clone(),
                             method: m,
                             code: code.clone(),
                             ip: 0,
-                            locals: args.clone(),
-                            stack: vec![]
+                            locals,
+                            stack: vec![],
                         };
                     }
                 }
