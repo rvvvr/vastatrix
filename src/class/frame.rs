@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::class::Class;
+use crate::class::{Class, ConstantsPoolInfo, method::Descriptor};
 
 pub struct Frame {
     pub class: Class,
@@ -142,6 +142,32 @@ impl Frame {
                     } else {
                         self.ip += 2;
                     }
+                }
+                0xb8 => {
+                    let indexbyte1 = self.code[(self.ip + 1) as usize];
+                    let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    let method_info = &self.class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
+                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index } = method_info {
+                        let name_and_index = &self.class.constant_pool[*name_and_type_index as usize - 1];
+                        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_index {
+                            let desc = &self.class.constant_pool[*descriptor_index as usize - 1];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes } = desc {
+                                let descriptor = Descriptor::new(bytes.clone());
+                                let mut args: Vec<i32> = vec![];
+                                for _ in descriptor.types {
+                                    args.push(self.stack.pop_front().unwrap()); // will do type checking later.
+                                }
+                                let method = &self.class.constant_pool[*name_index as usize - 1];
+                                if let ConstantsPoolInfo::Utf8 { length, bytes } = method {
+                                    let mut frame = self.class.frame(bytes.clone(), &mut args);
+                                    self.stack.push_back(frame.exec());
+                                }
+                            }
+                        }
+                    } else {
+                        panic!("invokestatic was not a method reference!");
+                    }
+                    self.ip += 2;
                 }
                 _ => {
                     panic!("Unimplemented opcode: 0x{:x}", op);

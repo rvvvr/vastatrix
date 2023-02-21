@@ -345,17 +345,14 @@ impl Class {
                         attribute_info,
                     } = attribute
                     {
-                        let mut locals: Vec<i32> = vec![];
-                        locals.append(args);
-                        while (locals.len() != *max_locals as usize) {
-                            locals.push(0);
-                        }
+                        let mut locals: Vec<i32> = vec![0; (max_locals - args.len() as u16).into()];
+                        args.append(&mut locals);
                         return Frame {
                             class: self.clone(),
                             method: m,
                             code: code.clone(),
                             ip: 0,
-                            locals,
+                            locals: args.clone(),
                             stack: vec![].into(),
                         };
                     }

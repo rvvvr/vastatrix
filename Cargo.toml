@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+broom = "0.3.2"
 bytes = "1.4.0"
 nom = "7.1.3"
