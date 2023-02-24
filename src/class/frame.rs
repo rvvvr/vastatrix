@@ -1,138 +1,176 @@
 use std::collections::VecDeque;
 
-use crate::class::{Class, ConstantsPoolInfo, method::Descriptor};
+use broom::Handle;
+
+use super::method::Descriptor;
+use crate::class::{ConstantsPoolInfo};
+use crate::vastatrix::{VTXObject, Vastatrix};
 
 pub struct Frame {
-    pub class: Class,
-    pub method: String,
-    pub ip: u32,
-    pub code: Vec<u8>,
-    pub locals: Vec<i32>,
-    pub stack: VecDeque<i32>,
+    pub class_handle: Handle<VTXObject>,
+    pub method:       String,
+    pub ip:           u32,
+    pub code:         Vec<u8>,
+    pub locals:       Vec<i32>,
+    pub stack:        VecDeque<i32>,
 }
 
 impl Frame {
-    pub fn exec(&mut self) -> i32 {
-        //would rather not do JIT yet...
+    pub fn exec(&mut self, running_in: &mut Vastatrix) -> Option<i32> {
+        // either its a 32 bit int or its a void, type checking should catch this (in
+        // the future, for now i'm just relying on the compiler) would rather
+        // not do JIT yet...
         loop {
             let op = self.code[self.ip as usize];
-            println!(
-                "method: {}, opcode: 0x{:x}, current stack:{:?}",
-                self.method, op, self.stack
-            );
-            let n = self.stack.len();
+            let class = running_in.get_class(self.class_handle);
+            let this_class = &class.constant_pool[class.this_class as usize - 1];
+            if let ConstantsPoolInfo::Class { name_index, } = this_class {
+                let name = &class.constant_pool[*name_index as usize - 1];
+                if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
+                    println!("class: {}, method: {}, opcode: 0x{:x}, current stack:{:?}", bytes.to_string(), self.method, op, self.stack);
+                }
+            }
+            drop(this_class);
             match op {
                 0x2 => {
                     // iconst_m1
                     self.stack.push_back(-1);
-                }
+                },
                 0x3 => {
-                    //iconst_0
+                    // iconst_0
                     self.stack.push_back(0);
-                }
+                },
                 0x4 => {
                     // iconst_1
                     self.stack.push_back(1);
-                }
+                },
                 0x5 => {
                     // iconst_2
                     self.stack.push_back(2);
-                }
+                },
                 0x6 => {
                     // iconst_3
                     self.stack.push_back(3);
-                }
+                },
                 0x7 => {
                     self.stack.push_back(4);
-                }
+                },
                 0x8 => {
                     self.stack.push_back(5);
+                },
+                0x12 => {
+                    let index = self.code[self.ip as usize + 1];
+                    let class = running_in.get_class(self.class_handle);
+                    let constant = &class.constant_pool[index as usize - 1];
+                    match constant {
+                        ConstantsPoolInfo::Integer { bytes } => {
+                            self.stack.push_back(*bytes as i32);
+                        }
+                        a => {
+                            panic!("BAD! {:?}", a);
+                        }
+                    }
                 }
                 0x15 => {
                     self.ip += 1;
                     self.stack.push_back(self.locals[self.code[self.ip as usize] as usize]);
-                }
-                0x1a => {
-                    //iload_0
+                },
+                0x1A => {
+                    // iload_0
                     self.stack.push_back(self.locals[0]);
-                }
-                0x1b => {
+                },
+                0x1B => {
                     // iload_1
                     self.stack.push_back(self.locals[1]);
                 },
-                0x1c => {
+                0x1C => {
                     self.stack.push_back(self.locals[2]);
                 },
-                0x1d => {
+                0x1D => {
                     self.stack.push_back(self.locals[3]);
-                }
+                },
+                0x2A => {
+                    self.stack.push_back(self.locals[0]);
+                },
                 0x36 => {
                     // istore     index
                     let value = self.stack.pop_front().unwrap();
                     self.ip += 1;
                     self.locals[self.code[self.ip as usize] as usize] = value;
-                }
-                0x3b => {
+                },
+                0x3B => {
                     // istore_0
                     let value = self.stack.pop_front().unwrap();
                     self.locals[0] = value;
-                }
-                0x3c => {
+                },
+                0x3C => {
                     let value = self.stack.pop_front().unwrap();
                     self.locals[1] = value;
-                }
-                0x3d => {
+                },
+                0x3D => {
                     let value = self.stack.pop_front().unwrap();
                     self.locals[2] = value;
-                }
-                0x3e => {
+                },
+                0x3E => {
                     let value = self.stack.pop_front().unwrap();
                     self.locals[3] = value;
-                }
+                },
+                0x4B => {
+                    let value = self.stack.pop_front().unwrap();
+                    self.locals[0] = value;
+                },
+                0x57 => {
+                    self.stack.pop_front().unwrap();
+                },
+                0x59 => {
+                    let value = self.stack[0];
+                    self.stack.push_back(value);
+                },
                 0x60 => {
-                    //iadd
+                    // iadd
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
                     self.stack.push_back(b.wrapping_add(a));
-                }
+                },
                 0x64 => {
                     // isub
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
                     self.stack.push_back(b.wrapping_sub(a));
-                }
+                },
                 0x68 => {
                     // imul
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
                     self.stack.push_back(b.wrapping_mul(a));
-                }
-                0x6c => {
-                    //idiv
+                },
+                0x6C => {
+                    // idiv
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
                     self.stack.push_back(b.wrapping_div(a));
-                }
+                },
                 0x84 => {
                     let index = self.code[(self.ip + 1) as usize];
                     let cons_t = self.code[(self.ip + 2) as usize];
                     self.locals[index as usize] += cons_t as i32;
                     self.ip += 2;
-                }
-                0xa7 => {
+                },
+                0xA7 => {
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
                     println!("{}", branchbyte1);
                     let branchbyte2 = self.code[(self.ip + 2) as usize];
                     println!("{}", branchbyte2);
                     self.ip = self.ip.checked_add_signed((((((branchbyte1 as u16) << 8) | branchbyte2 as u16) - 1) as i16).into()).unwrap();
                     println!("{:?}", self.code);
-                }
-                0xac => {
+                },
+                0xAC => {
                     // ireturn
                     let v = self.stack.pop_front().unwrap();
-                    return v;
-                }
-                0xa2 => { // if_icmpge    brancbyte1      branchbyte2
+                    return Some(v);
+                },
+                0xA2 => {
+                    // if_icmpge    brancbyte1      branchbyte2
                     let value1 = self.stack.pop_front().unwrap();
                     let value2 = self.stack.pop_front().unwrap();
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
@@ -142,25 +180,147 @@ impl Frame {
                     } else {
                         self.ip += 2;
                     }
-                }
-                0xb8 => {
+                },
+                0xB1 => {
+                    return None;
+                },
+                0xB5 => {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    let method_info = &self.class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
-                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index } = method_info {
-                        let name_and_index = &self.class.constant_pool[*name_and_type_index as usize - 1];
-                        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_index {
-                            let desc = &self.class.constant_pool[*descriptor_index as usize - 1];
-                            if let ConstantsPoolInfo::Utf8 { length, bytes } = desc {
-                                let descriptor = Descriptor::new(bytes.clone());
-                                let mut args: Vec<i32> = vec![];
-                                for _ in descriptor.types {
-                                    args.push(self.stack.pop_front().unwrap()); // will do type checking later.
+                    let objectref = self.stack.pop_front().unwrap();
+                    let value = self.stack.pop_front().unwrap();
+                    let this_class = running_in.get_class(self.class_handle).clone();
+                    let instance = running_in.get_instance(objectref as usize);
+                    let field_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    if let ConstantsPoolInfo::FieldRef { class_index, name_and_type_index } = field_info {
+                        let class = &this_class.constant_pool[*class_index as usize - 1];
+                        /*if let ConstantsPoolInfo::Class { name_index } = class {
+                            let class_name = &this_class.constant_pool[*name_index as usize - 1];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes } = class_name {
+                                let class_handle = running_in.load_or_get_class_handle(bytes.to_string());
+                                let that_class = running_in.get_class(class_handle); // don't know if i need this right now.
+                            }
+                        }*/
+                        let name_and_type = &this_class.constant_pool[*name_and_type_index as usize - 1];
+                        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type {
+                            let name = &this_class.constant_pool[*name_index as usize - 1];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes } = name {
+                                instance.fields.insert(bytes.to_string(), Some(value));
+                            }
+                        }
+                    }
+                    self.ip += 2;
+                },
+                0xB6 => {
+                    let indexbyte1 = self.code[(self.ip + 1) as usize];
+                    let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    let this_class = running_in.get_class(self.class_handle).clone();
+                    let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
+                        let class = &this_class.constant_pool[*class_index as usize - 1];
+                        if let ConstantsPoolInfo::Class { name_index, } = class {
+                            let classpath = &this_class.constant_pool[*name_index as usize];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = classpath {
+                                let handle = running_in.load_or_get_class_handle(bytes.to_string());
+                                let mut class = running_in.get_class(handle).clone();
+                                let name_and_type = &this_class.constant_pool[*name_and_type_index as usize - 1];
+                                if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_type {
+                                    let name = &this_class.constant_pool[*name_index as usize - 1];
+                                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
+                                        let name = bytes;
+                                        let descriptor = &this_class.constant_pool[*descriptor_index as usize - 1];
+                                        if let ConstantsPoolInfo::Utf8 { length, bytes, } = descriptor {
+                                            let desc = Descriptor::new(bytes.to_string());
+                                            let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
+                                            for _ in desc.types {
+                                                args.push(self.stack.pop_front().unwrap());
+                                            }
+                                            let back = class.frame(name.to_string(), &mut args).exec(running_in);
+                                            if back.is_some() {
+                                                self.stack.push_back(back.unwrap());
+                                            }
+                                        }
+                                    }
                                 }
-                                let method = &self.class.constant_pool[*name_index as usize - 1];
-                                if let ConstantsPoolInfo::Utf8 { length, bytes } = method {
-                                    let mut frame = self.class.frame(bytes.clone(), &mut args);
-                                    self.stack.push_back(frame.exec());
+                            }
+                        }
+                    }
+                    self.ip += 2;
+                },
+                0xB7 => {
+                    let indexbyte1 = self.code[(self.ip + 1) as usize];
+                    let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    let this_class = running_in.get_class(self.class_handle).clone();
+                    let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
+                        let class = &this_class.constant_pool[*class_index as usize - 1];
+                        if let ConstantsPoolInfo::Class { name_index, } = class {
+                            let classpath = &this_class.constant_pool[*name_index as usize - 1];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = classpath {
+                                let handle = running_in.load_or_get_class_handle(bytes.clone());
+                                let mut class = running_in.get_class(handle).clone();
+                                let name_and_index = &this_class.constant_pool[*name_and_type_index as usize - 1];
+                                if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_index {
+                                    let name = &this_class.constant_pool[*name_index as usize - 1];
+                                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
+                                        let name = bytes;
+                                        if name != "<init>" && running_in.get_class(self.class_handle).access_flags & 0x0020 != 0 {
+                                            panic!("scary!!!");
+                                        }
+                                        for method in class.clone().methods {
+                                            let method_name = &class.constant_pool[method.name_index as usize - 1];
+                                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_name {
+                                                if name == bytes {
+                                                    let descriptor = &this_class.constant_pool[*descriptor_index as usize - 1];
+                                                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = descriptor {
+                                                        let desc = Descriptor::new(bytes.to_string());
+                                                        println!("Descriptor: {}", bytes.to_string());
+                                                        let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
+                                                        for _ in desc.types {
+                                                            args.push(self.stack.pop_front().unwrap());
+                                                        }
+                                                        let back = class.frame(name.to_string(), &mut args).exec(running_in);
+                                                        if back.is_some() {
+                                                            self.stack.push_back(back.unwrap());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.ip += 2;
+                },
+                0xB8 => {
+                    let indexbyte1 = self.code[(self.ip + 1) as usize];
+                    let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    let this_class = running_in.get_class(self.class_handle).clone();
+                    let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
+                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
+                        let class = &this_class.constant_pool[*class_index as usize - 1];
+                        if let ConstantsPoolInfo::Class { name_index, } = class {
+                            let classpath = &this_class.constant_pool[*name_index as usize - 1];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = classpath {
+                                let handle = running_in.load_or_get_class_handle(bytes.clone());
+                                let class = running_in.get_class(handle);
+                                let name_and_index = &this_class.constant_pool[*name_and_type_index as usize - 1];
+                                if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_index {
+                                    let desc = &this_class.constant_pool[*descriptor_index as usize - 1];
+                                    if let ConstantsPoolInfo::Utf8 { length: _, bytes, } = desc {
+                                        let descriptor = Descriptor::new(bytes.clone());
+                                        let mut args: Vec<i32> = vec![];
+                                        for _ in descriptor.types {
+                                            args.push(self.stack.pop_front().unwrap()); // will do type checking later.
+                                        }
+                                        let method = &this_class.constant_pool[*name_index as usize - 1];
+                                        if let ConstantsPoolInfo::Utf8 { length: _, bytes, } = method {
+                                            let mut frame = class.frame(bytes.clone(), &mut args);
+                                            self.stack.push_back(frame.exec(running_in).unwrap());
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -168,10 +328,25 @@ impl Frame {
                         panic!("invokestatic was not a method reference!");
                     }
                     self.ip += 2;
-                }
+                },
+                0xBB => {
+                    let indexbyte1 = self.code[(self.ip + 1) as usize];
+                    let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    let this_class = running_in.get_class(self.class_handle).clone();
+                    let class_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    if let ConstantsPoolInfo::Class { name_index, } = class_info {
+                        let name = &this_class.constant_pool[*name_index as usize - 1];
+                        if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
+                            let handle = running_in.load_or_get_class_handle(bytes.to_string());
+                            let mut class = running_in.get_class(handle).clone();
+                            self.stack.push_back(running_in.prepare_instance(&mut class));
+                        }
+                    }
+                    self.ip += 2;
+                },
                 _ => {
                     panic!("Unimplemented opcode: 0x{:x}", op);
-                }
+                },
             }
             self.ip += 1;
         }

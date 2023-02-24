@@ -1,12 +1,10 @@
-use std::rc::Rc;
-
-use broom::trace::{Tracer, Trace};
+use broom::trace::{Trace, Tracer};
 
 use crate::vastatrix::VTXObject;
 
 #[derive(Debug)]
 pub struct Descriptor {
-    pub types: Vec<MethodType>,
+    pub types:   Vec<MethodType>,
     pub returns: Option<MethodType>,
 }
 
@@ -39,12 +37,19 @@ impl Descriptor {
         let mut inarg = false;
         let mut types = vec![];
         let mut returns = None;
-        for cha in desc.chars() { // will probably convert this to something to do with nom
+        for cha in desc.chars() {
+            // will probably convert this to something to do with nom
             match cha {
-                '(' => {inarg = true;}
-                ')' => {inarg = false;}
-                'L' => {panic!("no classes.")}
-                'I' => {
+                '(' => {
+                    inarg = true;
+                },
+                ')' => {
+                    inarg = false;
+                },
+                'L' => {
+                    panic!("no classes.")
+                },
+                'I' =>
                     if inarg {
                         types.push(MethodType::Int);
                     } else {
@@ -53,9 +58,8 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                'B' => {
+                    },
+                'B' =>
                     if inarg {
                         types.push(MethodType::Byte);
                     } else {
@@ -64,9 +68,8 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                'C' => {
+                    },
+                'C' =>
                     if inarg {
                         types.push(MethodType::Char);
                     } else {
@@ -75,9 +78,8 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                'D' => {
+                    },
+                'D' =>
                     if inarg {
                         types.push(MethodType::Double);
                     } else {
@@ -86,9 +88,8 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                'F' => {
+                    },
+                'F' =>
                     if inarg {
                         types.push(MethodType::Float);
                     } else {
@@ -97,9 +98,8 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                'J' => {
+                    },
+                'J' =>
                     if inarg {
                         types.push(MethodType::Long);
                     } else {
@@ -108,9 +108,8 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                'S' => {
+                    },
+                'S' =>
                     if inarg {
                         types.push(MethodType::Short);
                     } else {
@@ -119,9 +118,8 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                'Z' => {
+                    },
+                'Z' =>
                     if inarg {
                         types.push(MethodType::Boolean);
                     } else {
@@ -130,17 +128,13 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
+                    },
                 '[' => {
                     panic!("no varargs yet");
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
-        Self {
-            types,
-            returns
-        }
+        Self { types, returns }
     }
 }

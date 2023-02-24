@@ -44,12 +44,14 @@ public class Math {
 	}
 
 	public static class Test {
-		public Test() {
+		private int zero;
 
+		public Test() {
+			zero = 0;
 		}
 
 		public int zero() {
-			return 0;
+			return zero;
 		}
 	}
 }
