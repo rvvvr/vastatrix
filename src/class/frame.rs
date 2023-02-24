@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use broom::Handle;
 
 use super::method::Descriptor;
-use crate::class::{ConstantsPoolInfo};
+use crate::class::ConstantsPoolInfo;
 use crate::vastatrix::{VTXObject, Vastatrix};
 
 pub struct Frame {
@@ -63,14 +63,14 @@ impl Frame {
                     let class = running_in.get_class(self.class_handle);
                     let constant = &class.constant_pool[index as usize - 1];
                     match constant {
-                        ConstantsPoolInfo::Integer { bytes } => {
+                        ConstantsPoolInfo::Integer { bytes, } => {
                             self.stack.push_back(*bytes as i32);
-                        }
+                        },
                         a => {
                             panic!("BAD! {:?}", a);
-                        }
+                        },
                     }
-                }
+                },
                 0x15 => {
                     self.ip += 1;
                     self.stack.push_back(self.locals[self.code[self.ip as usize] as usize]);
