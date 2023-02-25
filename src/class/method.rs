@@ -8,7 +8,7 @@ pub struct Descriptor {
     pub returns: Option<MethodType>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MethodType {
     Void,
     Byte,
@@ -137,4 +137,8 @@ impl Descriptor {
         }
         Self { types, returns }
     }
+}
+
+impl PartialEq<Descriptor> for Descriptor {
+    fn eq(&self, other: &Descriptor) -> bool { self.types == other.types && self.returns == other.returns }
 }

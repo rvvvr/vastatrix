@@ -16,10 +16,11 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub fn exec(&mut self, running_in: &mut Vastatrix) -> Option<i32> {
+    pub fn exec(&mut self, args: Vec<i32>, running_in: &mut Vastatrix) -> Option<i32> {
         // either its a 32 bit int or its a void, type checking should catch this (in
         // the future, for now i'm just relying on the compiler) would rather
         // not do JIT yet...
+        self.locals = args.clone();
         loop {
             let op = self.code[self.ip as usize];
             let class = running_in.get_class(self.class_handle);
@@ -217,34 +218,17 @@ impl Frame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
                     if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
-                        let class = &this_class.constant_pool[*class_index as usize - 1];
-                        if let ConstantsPoolInfo::Class { name_index, } = class {
-                            let classpath = &this_class.constant_pool[*name_index as usize];
-                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = classpath {
-                                let handle = running_in.load_or_get_class_handle(bytes.to_string());
-                                let mut class = running_in.get_class(handle).clone();
-                                let name_and_type = &this_class.constant_pool[*name_and_type_index as usize - 1];
-                                if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_type {
-                                    let name = &this_class.constant_pool[*name_index as usize - 1];
-                                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
-                                        let name = bytes;
-                                        let descriptor = &this_class.constant_pool[*descriptor_index as usize - 1];
-                                        if let ConstantsPoolInfo::Utf8 { length, bytes, } = descriptor {
-                                            let desc = Descriptor::new(bytes.to_string());
-                                            let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
-                                            for _ in desc.types {
-                                                args.push(self.stack.pop_front().unwrap());
-                                            }
-                                            let back = class.frame(name.to_string(), &mut args).exec(running_in);
-                                            if back.is_some() {
-                                                self.stack.push_back(back.unwrap());
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        let (mut method, desc) = this_class.clone().resolve_method(method_info.clone(), false, None, running_in);
+                        let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
+                        for _ in desc.types {
+                            args.push(self.stack.pop_front().unwrap());
+                        }
+                        let back = method.exec(args, running_in);
+                        if back.is_some() {
+                            self.stack.push_back(back.unwrap());
                         }
                     }
+
                     self.ip += 2;
                 },
                 0xB7 => {
@@ -253,45 +237,17 @@ impl Frame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
                     if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
-                        let class = &this_class.constant_pool[*class_index as usize - 1];
-                        if let ConstantsPoolInfo::Class { name_index, } = class {
-                            let classpath = &this_class.constant_pool[*name_index as usize - 1];
-                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = classpath {
-                                let handle = running_in.load_or_get_class_handle(bytes.clone());
-                                let mut class = running_in.get_class(handle).clone();
-                                let name_and_index = &this_class.constant_pool[*name_and_type_index as usize - 1];
-                                if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_index {
-                                    let name = &this_class.constant_pool[*name_index as usize - 1];
-                                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
-                                        let name = bytes;
-                                        if name != "<init>" && running_in.get_class(self.class_handle).access_flags & 0x0020 != 0 {
-                                            panic!("scary!!!");
-                                        }
-                                        for method in class.clone().methods {
-                                            let method_name = &class.constant_pool[method.name_index as usize - 1];
-                                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_name {
-                                                if name == bytes {
-                                                    let descriptor = &this_class.constant_pool[*descriptor_index as usize - 1];
-                                                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = descriptor {
-                                                        let desc = Descriptor::new(bytes.to_string());
-                                                        println!("Descriptor: {}", bytes.to_string());
-                                                        let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
-                                                        for _ in desc.types {
-                                                            args.push(self.stack.pop_front().unwrap());
-                                                        }
-                                                        let back = class.frame(name.to_string(), &mut args).exec(running_in);
-                                                        if back.is_some() {
-                                                            self.stack.push_back(back.unwrap());
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        let (mut method, desc) = this_class.clone().resolve_method(method_info.clone(), false, None, running_in);
+                        let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
+                        for _ in desc.types {
+                            args.push(self.stack.pop_front().unwrap());
+                        }
+                        let back = method.exec(args, running_in);
+                        if back.is_some() {
+                            self.stack.push_back(back.unwrap());
                         }
                     }
+
                     self.ip += 2;
                 },
                 0xB8 => {
@@ -300,29 +256,14 @@ impl Frame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
                     if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
-                        let class = &this_class.constant_pool[*class_index as usize - 1];
-                        if let ConstantsPoolInfo::Class { name_index, } = class {
-                            let classpath = &this_class.constant_pool[*name_index as usize - 1];
-                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = classpath {
-                                let handle = running_in.load_or_get_class_handle(bytes.clone());
-                                let class = running_in.get_class(handle);
-                                let name_and_index = &this_class.constant_pool[*name_and_type_index as usize - 1];
-                                if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_index {
-                                    let desc = &this_class.constant_pool[*descriptor_index as usize - 1];
-                                    if let ConstantsPoolInfo::Utf8 { length: _, bytes, } = desc {
-                                        let descriptor = Descriptor::new(bytes.clone());
-                                        let mut args: Vec<i32> = vec![];
-                                        for _ in descriptor.types {
-                                            args.push(self.stack.pop_front().unwrap()); // will do type checking later.
-                                        }
-                                        let method = &this_class.constant_pool[*name_index as usize - 1];
-                                        if let ConstantsPoolInfo::Utf8 { length: _, bytes, } = method {
-                                            let mut frame = class.frame(bytes.clone(), &mut args);
-                                            self.stack.push_back(frame.exec(running_in).unwrap());
-                                        }
-                                    }
-                                }
-                            }
+                        let (mut method, desc) = this_class.clone().resolve_method(method_info.clone(), false, None, running_in);
+                        let mut args: Vec<i32> = vec![];
+                        for _ in desc.types {
+                            args.push(self.stack.pop_front().unwrap());
+                        }
+                        let back = method.exec(args, running_in);
+                        if back.is_some() {
+                            self.stack.push_back(back.unwrap());
                         }
                     } else {
                         panic!("invokestatic was not a method reference!");

@@ -10,10 +10,14 @@ MAIN	:= com.vastatrix.tests.Main
 SOURCES := $(shell find $(SOURCEDIR) -name '*.java')
 CLASSES := $(patsubst $(SOURCEDIR)/%.java, $(SOURCEDIR)/%.class, ${SOURCES})
 
-all: clean $(OUT)
+all: clean $(OUT) test
+
+test:
+	cargo run -- --jar $(OUT)
 
 $(OUT): $(CLASSES)
-	$(JAR) cvfe $(OUT) $(MAIN) testy/build/*
+	cd testy/build && $(JAR) cvfe $(OUT) $(MAIN) *
+	mv testy/build/$(OUT) ./$(OUT)
 
 %.class: %.java
 	$(JAVAC) $(JAVACFLAGS) $<

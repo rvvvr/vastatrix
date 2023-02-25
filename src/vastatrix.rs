@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::Read;
 use std::ops::Deref;
@@ -9,8 +9,9 @@ use bytes::Bytes;
 use zip::ZipArchive;
 
 use crate::class::attribute::Attribute;
+use crate::class::frame::Frame;
 use crate::class::instance::Instance;
-use crate::class::method::MethodType;
+use crate::class::method::{Descriptor, MethodType, self};
 use crate::class::{Class, ConstantsPoolInfo};
 
 #[derive(Debug)]
@@ -60,7 +61,48 @@ impl Vastatrix {
                 let class_path = class_vec.join("/");
                 let handle = self.load_or_get_class_handle(class_path);
                 let class = self.get_class(handle);
-                class.frame("main".to_string(), &mut (vec![] as Vec<i32>)).exec(self);
+                let maindesc = "([Ljava/lang/String;)V".to_string();
+                let mut method_info = None;
+                for method in &class.methods {
+                    let name_pool = &class.constant_pool[method.name_index as usize - 1];
+                    let desc_pool = &class.constant_pool[method.name_index as usize - 1];
+                    let mut name: String = "".to_string();
+                    let mut desc: String = "".to_string();
+                    if let ConstantsPoolInfo::Utf8 { length, bytes } = name_pool {
+                        name = bytes.to_string();
+                    } else {
+                        panic!("name was not a utf8!");
+                    }
+
+                    if let ConstantsPoolInfo::Utf8 { length, bytes } = desc_pool {
+                        desc = bytes.to_string();
+                    } else {
+                        panic!("name was not a utf8!");
+                    }
+
+                    if name == "main".to_string() && desc == maindesc {
+                        method_info = Some(method);
+                        break;
+                    }
+                }
+                if method_info.is_none() {
+                    panic!("could not find main!");
+                }
+                for attribute in &method_info.unwrap().attribute_info {
+                    if let Attribute::Code { common, max_stack, max_locals, code_length, code, exception_table_length, exception_table, attribute_count, attribute_info } = attribute {
+                        let locals: Vec<i32> = vec![];
+                        let stack: VecDeque<i32> = vec![].into();
+                        let mut frame = Frame {
+                            class_handle: handle,
+                            method: "main".to_string(),
+                            ip: 0,
+                            code: code.to_vec(),
+                            locals,
+                            stack,
+                        };
+                        frame.exec(vec![], self);
+                    }
+                }
             }
         }
     }
