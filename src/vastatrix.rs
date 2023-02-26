@@ -11,7 +11,7 @@ use zip::ZipArchive;
 use crate::class::attribute::Attribute;
 use crate::class::frame::Frame;
 use crate::class::instance::Instance;
-use crate::class::method::{self, Descriptor, MethodType};
+use crate::class::method::{self, Argument, Descriptor, MethodType};
 use crate::class::{Class, ConstantsPoolInfo};
 
 #[derive(Debug)]
@@ -99,8 +99,8 @@ impl Vastatrix {
                                              attribute_count,
                                              attribute_info, } = attribute
                     {
-                        let locals: Vec<i32> = vec![0; *max_locals as usize];
-                        let stack: VecDeque<i32> = vec![].into();
+                        let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
+                        let stack: VecDeque<Argument> = vec![].into();
                         let mut frame = Frame { class_handle: handle, method: "main".to_string(), ip: 0, code: code.to_vec(), locals, stack };
                         drop(class);
                         frame.exec(vec![], self);
@@ -137,13 +137,12 @@ impl Vastatrix {
         panic!("could not get class!");
     }
 
-    pub fn prepare_instance(&mut self, class: &mut Class) -> i32 {
+    pub fn prepare_instance(&mut self, class: &mut Class) -> u32 {
         let mut instance = Instance::new();
         for field in &class.fields {
             let name = &class.constant_pool[field.name_index as usize - 1];
             if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
                 println!("field name: {}", bytes);
-                let default_value: Option<i32> = None;
                 if field.access_flags & 0x0008 != 0 {
                     for attribute in &field.attribute_info {
                         if let Attribute::ConstantValue { common, constantvalue_index, } = attribute {
@@ -154,12 +153,12 @@ impl Vastatrix {
                         }
                     }
                 }
-                instance.fields.insert(bytes.to_string(), default_value);
+                instance.fields.insert(bytes.to_string(), Argument::new(0, MethodType::Void));
             }
         }
         let handle = self.heap.insert_temp(VTXObject::Instance(instance));
         self.instance_handles.push(handle);
-        return self.instance_handles.len() as i32 - 1;
+        return self.instance_handles.len() as u32 - 1;
     }
 
     pub fn get_instance(&mut self, index: usize) -> &mut Instance {

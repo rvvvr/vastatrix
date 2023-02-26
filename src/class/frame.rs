@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 
 use broom::Handle;
 
-use super::method::Descriptor;
+use super::method::{Argument, Descriptor};
+use crate::class::method::MethodType;
 use crate::class::ConstantsPoolInfo;
 use crate::vastatrix::{VTXObject, Vastatrix};
 
@@ -11,18 +12,18 @@ pub struct Frame {
     pub method:       String,
     pub ip:           u32,
     pub code:         Vec<u8>,
-    pub locals:       Vec<i32>,
-    pub stack:        VecDeque<i32>,
+    pub locals:       Vec<Argument>,
+    pub stack:        VecDeque<Argument>,
 }
 
 impl Frame {
-    pub fn exec(&mut self, args: Vec<i32>, running_in: &mut Vastatrix) -> Option<i32> {
+    pub fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument {
         // either its a 32 bit int or its a void, type checking should catch this (in
         // the future, for now i'm just relying on the compiler) would rather
         // not do JIT yet...
         println!("Method: {}, locals len: {}", self.method, self.locals.len());
         for index in 0..args.len() {
-            self.locals[index] = args[index];
+            self.locals[index] = args[index].clone();
         }
         loop {
             let op = self.code[self.ip as usize];
@@ -38,29 +39,29 @@ impl Frame {
             match op {
                 0x2 => {
                     // iconst_m1
-                    self.stack.push_back(-1);
+                    self.stack.push_back(Argument::new(-1, MethodType::Int));
                 },
                 0x3 => {
                     // iconst_0
-                    self.stack.push_back(0);
+                    self.stack.push_back(Argument::new(0, MethodType::Int));
                 },
                 0x4 => {
                     // iconst_1
-                    self.stack.push_back(1);
+                    self.stack.push_back(Argument::new(1, MethodType::Int));
                 },
                 0x5 => {
                     // iconst_2
-                    self.stack.push_back(2);
+                    self.stack.push_back(Argument::new(2, MethodType::Int));
                 },
                 0x6 => {
                     // iconst_3
-                    self.stack.push_back(3);
+                    self.stack.push_back(Argument::new(3, MethodType::Int));
                 },
                 0x7 => {
-                    self.stack.push_back(4);
+                    self.stack.push_back(Argument::new(4, MethodType::Int));
                 },
                 0x8 => {
-                    self.stack.push_back(5);
+                    self.stack.push_back(Argument::new(5, MethodType::Int));
                 },
                 0x12 => {
                     let index = self.code[self.ip as usize + 1];
@@ -68,7 +69,7 @@ impl Frame {
                     let constant = &class.constant_pool[index as usize - 1];
                     match constant {
                         ConstantsPoolInfo::Integer { bytes, } => {
-                            self.stack.push_back(*bytes as i32);
+                            self.stack.push_back(Argument::new(*bytes as i32, MethodType::Int));
                         },
                         a => {
                             panic!("BAD! {:?}", a);
@@ -77,24 +78,24 @@ impl Frame {
                 },
                 0x15 => {
                     self.ip += 1;
-                    self.stack.push_back(self.locals[self.code[self.ip as usize] as usize]);
+                    self.stack.push_back(self.locals[self.code[self.ip as usize] as usize].clone());
                 },
                 0x1A => {
                     // iload_0
-                    self.stack.push_back(self.locals[0]);
+                    self.stack.push_back(self.locals[0].clone());
                 },
                 0x1B => {
                     // iload_1
-                    self.stack.push_back(self.locals[1]);
+                    self.stack.push_back(self.locals[1].clone());
                 },
                 0x1C => {
-                    self.stack.push_back(self.locals[2]);
+                    self.stack.push_back(self.locals[2].clone());
                 },
                 0x1D => {
-                    self.stack.push_back(self.locals[3]);
+                    self.stack.push_back(self.locals[3].clone());
                 },
                 0x2A => {
-                    self.stack.push_back(self.locals[0]);
+                    self.stack.push_back(self.locals[0].clone());
                 },
                 0x36 => {
                     // istore     index
@@ -128,32 +129,32 @@ impl Frame {
                     self.stack.pop_front().unwrap();
                 },
                 0x59 => {
-                    let value = self.stack[0];
-                    self.stack.push_back(value);
+                    let value = &self.stack[0];
+                    self.stack.push_back(value.clone());
                 },
                 0x60 => {
                     // iadd
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
-                    self.stack.push_back(b.wrapping_add(a));
+                    self.stack.push_back(b.wrapping_iadd(a));
                 },
                 0x64 => {
                     // isub
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
-                    self.stack.push_back(b.wrapping_sub(a));
+                    self.stack.push_back(b.wrapping_isub(a));
                 },
                 0x68 => {
                     // imul
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
-                    self.stack.push_back(b.wrapping_mul(a));
+                    self.stack.push_back(b.wrapping_imul(a));
                 },
                 0x6C => {
                     // idiv
                     let a = self.stack.pop_front().unwrap();
                     let b = self.stack.pop_front().unwrap();
-                    self.stack.push_back(b.wrapping_div(a));
+                    self.stack.push_back(b.wrapping_idiv(a));
                 },
                 0x84 => {
                     let index = self.code[(self.ip + 1) as usize];
@@ -172,7 +173,7 @@ impl Frame {
                 0xAC => {
                     // ireturn
                     let v = self.stack.pop_front().unwrap();
-                    return Some(v);
+                    return v;
                 },
                 0xA2 => {
                     // if_icmpge    brancbyte1      branchbyte2
@@ -187,14 +188,14 @@ impl Frame {
                     }
                 },
                 0xB1 => {
-                    return None;
+                    return Argument::new(0, MethodType::Void);
                 },
                 0xB4 => {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    let objectref = self.stack.pop_front().unwrap();
+                    let mut objectref = self.stack.pop_front().unwrap();
                     let this_class = running_in.get_class(self.class_handle).clone();
-                    let instance = running_in.get_instance(objectref as usize);
+                    let instance = running_in.get_instance(objectref.value_ref() as usize);
                     let field_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
                     if let ConstantsPoolInfo::FieldRef { class_index, name_and_type_index } = field_info {
                         let class = &this_class.constant_pool[*class_index as usize - 1];
@@ -209,7 +210,7 @@ impl Frame {
                         if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type {
                             let name = &this_class.constant_pool[*name_index as usize - 1];
                             if let ConstantsPoolInfo::Utf8 { length, bytes } = name {
-                                self.stack.push_back(instance.fields.get(&bytes.to_string()).expect("a").expect("b"));
+                                self.stack.push_back(instance.fields.get(&bytes.to_string()).expect("a").clone());
                             }
                         }
                     }
@@ -218,10 +219,10 @@ impl Frame {
                 0xB5 => {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    let objectref = self.stack.pop_front().unwrap();
+                    let mut objectref = self.stack.pop_front().unwrap();
                     let value = self.stack.pop_front().unwrap();
                     let this_class = running_in.get_class(self.class_handle).clone();
-                    let instance = running_in.get_instance(objectref as usize);
+                    let instance = running_in.get_instance(objectref.value_ref() as usize);
                     let field_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
                     if let ConstantsPoolInfo::FieldRef { class_index, name_and_type_index } = field_info {
                         let class = &this_class.constant_pool[*class_index as usize - 1];
@@ -236,7 +237,7 @@ impl Frame {
                         if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type {
                             let name = &this_class.constant_pool[*name_index as usize - 1];
                             if let ConstantsPoolInfo::Utf8 { length, bytes } = name {
-                                instance.fields.insert(bytes.to_string(), Some(value));
+                                instance.fields.insert(bytes.to_string(), value);
                             }
                         }
                     }
@@ -246,16 +247,17 @@ impl Frame {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
                     let this_class = running_in.get_class(self.class_handle).clone();
+                    let objectref = self.stack.pop_front().unwrap();
                     let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
                     if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
                         let (mut method, desc) = this_class.clone().resolve_method(method_info.clone(), false, None, running_in);
-                        let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
+                        let mut args: Vec<Argument> = vec![objectref];
                         for _ in desc.types {
                             args.push(self.stack.pop_front().unwrap());
                         }
                         let back = method.exec(args, running_in);
-                        if back.is_some() {
-                            self.stack.push_back(back.unwrap());
+                        if (!back.void()) {
+                            self.stack.push_back(back);
                         }
                     }
 
@@ -265,19 +267,19 @@ impl Frame {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
                     let this_class = running_in.get_class(self.class_handle).clone();
+                    let objectref = self.stack.pop_front().unwrap();
                     let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
                     if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
                         let (mut method, desc) = this_class.clone().resolve_method(method_info.clone(), false, None, running_in);
-                        let mut args: Vec<i32> = vec![self.stack.pop_front().unwrap()];
+                        let mut args: Vec<Argument> = vec![objectref];
                         for _ in desc.types {
                             args.push(self.stack.pop_front().unwrap());
                         }
                         let back = method.exec(args, running_in);
-                        if back.is_some() {
-                            self.stack.push_back(back.unwrap());
+                        if (!back.void()) {
+                            self.stack.push_back(back);
                         }
                     }
-
                     self.ip += 2;
                 },
                 0xB8 => {
@@ -288,13 +290,13 @@ impl Frame {
                     let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
                     if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
                         let (mut method, desc) = this_class.clone().resolve_method(method_info.clone(), false, None, running_in);
-                        let mut args: Vec<i32> = vec![];
+                        let mut args: Vec<Argument> = vec![];
                         for _ in desc.types {
                             args.push(self.stack.pop_front().unwrap());
                         }
                         let back = method.exec(args, running_in);
-                        if back.is_some() {
-                            self.stack.push_back(back.unwrap());
+                        if (!back.void()) {
+                            self.stack.push_back(back);
                         }
                     } else {
                         panic!("invokestatic was not a method reference!");
@@ -311,7 +313,7 @@ impl Frame {
                         if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
                             let handle = running_in.load_or_get_class_handle(bytes.to_string());
                             let mut class = running_in.get_class(handle).clone();
-                            self.stack.push_back(running_in.prepare_instance(&mut class));
+                            self.stack.push_back(Argument::new(running_in.prepare_instance(&mut class), MethodType::ClassReference));
                         }
                     }
                     self.ip += 2;

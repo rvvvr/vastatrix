@@ -6,6 +6,7 @@ use bytes::{Buf, Bytes};
 use super::frame::Frame;
 use super::method::Descriptor;
 use crate::class::attribute::{Attribute, AttributeCommon};
+use crate::class::method::{Argument, MethodType};
 use crate::vastatrix::{VTXObject, Vastatrix};
 
 #[derive(Debug, Clone)]
@@ -324,8 +325,8 @@ impl Class {
                                              attribute_count,
                                              attribute_info, } = attribute
                     {
-                        let locals: Vec<i32> = vec![0; *max_locals as usize];
-                        let stack: VecDeque<i32> = vec![0].into();
+                        let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
+                        let stack: VecDeque<Argument> = vec![].into();
                         return (Frame { class_handle: handle, method: method_name.clone(), ip: 0, code: code.to_vec(), locals, stack }, descriptor);
                     }
                 }

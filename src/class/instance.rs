@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use super::method::Argument;
+
 #[derive(Debug)]
 pub struct Instance {
-    pub fields: HashMap<String, Option<i32>>,
+    pub fields: HashMap<String, Argument>,
 }
 
 impl Instance {
