@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use broom::Handle;
 use bytes::{Buf, Bytes};
 
@@ -123,6 +125,7 @@ impl Class {
         let access_flags = bytes.get_u16();
         let this_class = bytes.get_u16();
         let super_class = bytes.get_u16();
+        println!("superclass index: {}", super_class);
         let interfaces_count = bytes.get_u16();
         let mut interfaces = vec![];
         for _ in 0..interfaces_count {
@@ -222,91 +225,99 @@ impl Class {
         if let ConstantsPoolInfo::Utf8 { bytes, .. } = &constant_pool[index as usize - 1] { Ok(bytes.to_string()) } else { Err(()) }
     }
 
-    pub fn resolve_method(self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Self>, running_in: &mut Vastatrix)
-                          -> (Frame, Descriptor) {
-        let class_indx: u16;
-        let name_and_type_indx: u16;
-        if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
-            class_indx = class_index;
-            name_and_type_indx = name_and_type_index;
+    pub fn resolve_method(self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Class>, running_in: &mut Vastatrix)
+                         -> (Frame, Descriptor) {
+        let class_index: u16;
+        let name_and_type: u16;
+        if let ConstantsPoolInfo::MethodRef { class_index: cindex, name_and_type_index: ntindex } = method_info {
+            if superclass {
+                class_index = class_in.as_ref().expect("superclass set without class_in?").super_class;
+            } else {
+                class_index = cindex;
+            }
+            name_and_type = ntindex;
         } else {
-            panic!("Method info passed was a {:?} instead!", method_info);
+            panic!("method ref wasnt a method???");
         }
-        let class_pool = &self.constant_pool[class_indx as usize - 1];
-        let name_and_type_pool = &self.constant_pool[name_and_type_indx as usize - 1];
-        let mut class: Self;
-        if let ConstantsPoolInfo::Class { name_index, } = class_pool {
-            let class_name = &self.constant_pool[*name_index as usize - 1];
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = class_name {
-                if class_in.is_some() {
-                    class = class_in.unwrap();
-                    if superclass {
-                        let superclass_pool = &self.constant_pool[class.super_class as usize - 1];
-                        if let ConstantsPoolInfo::Class { name_index, } = superclass_pool {
-                            let superclass_name_pool = &self.constant_pool[*name_index as usize - 1];
-                            if let ConstantsPoolInfo::Utf8 { length, bytes, } = superclass_name_pool {
-                                let handle = running_in.load_or_get_class_handle(bytes.to_string());
-                                class = running_in.get_class(handle).clone();
-                            }
-                        }
+        let method_name: String;
+        let method_desc: String;
+        let name_and_type_pool = &self.constant_pool[name_and_type as usize - 1];
+        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type_pool {
+            let name_pool = &self.constant_pool[*name_index as usize - 1];
+            let desc_pool = &self.constant_pool[*descriptor_index as usize - 1];
+            if let ConstantsPoolInfo::Utf8 { length, bytes } = name_pool {
+                method_name = bytes.to_string();
+            } else {
+                panic!("method name was not a string!");
+            }
+            if let ConstantsPoolInfo::Utf8 { length, bytes } = desc_pool {
+               method_desc = bytes.to_string(); 
+            } else {
+                panic!("method desc was not a string!");
+            }
+        } else {
+            panic!("nameandtype was not a nameandtype!");
+        }
+        let class: Class;
+        let handle: Handle<VTXObject>;
+        if superclass {
+            if class_in.is_some() {
+                let inclass = class_in.unwrap();
+                let superclass_pool = &inclass.constant_pool[inclass.super_class as usize - 1];
+                println!("superclass pool: {:?}", superclass_pool);
+                if let ConstantsPoolInfo::Class { name_index } = superclass_pool {
+                    let superclass_name_pool = &inclass.constant_pool[*name_index as usize - 1];
+                    if let ConstantsPoolInfo::Utf8 { length, bytes } = superclass_name_pool {
+                        handle = running_in.load_or_get_class_handle(bytes.to_string());
+                        println!("new class: {}", bytes.to_string());
+                        class = running_in.get_class(handle).clone();
+                    }else {
+                        panic!("please set class_in :(");
                     }
+                }else {
+                    panic!("please set class_in :(");
+                }    
+            } else {
+                panic!("please set class_in :(");
+            }
+        } else {
+            let class_pool = &self.constant_pool[class_index as usize - 1];
+            if let ConstantsPoolInfo::Class { name_index } = &class_pool {
+                let name_pool = &self.constant_pool[*name_index as usize - 1];
+                if let ConstantsPoolInfo::Utf8 { length, bytes } = name_pool {
+                   handle = running_in.load_or_get_class_handle(bytes.to_string());
+                   class = running_in.get_class(handle).clone(); 
                 } else {
-                    let handle = running_in.load_or_get_class_handle(bytes.to_string());
-                    class = running_in.get_class(handle).clone();
+                    panic!();
                 }
             } else {
-                panic!("fuck");
+                panic!();
             }
-        } else {
-            panic!("fuck");
-        }
-        let name: String;
-        let desc: Descriptor;
-        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_type_pool {
-            let name_pool = &self.constant_pool[*name_index as usize - 1];
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
-                name = bytes.to_string();
-            } else {
-                panic!("resolver name was not a utf8");
-            }
-            let desc_pool = &self.constant_pool[*descriptor_index as usize - 1];
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = desc_pool {
-                desc = Descriptor::new(bytes.to_string());
-            } else {
-                panic!("resolver desc was not a utf8");
-            }
-        } else {
-            panic!("method nameandtype was not that");
         }
         for method in &class.methods {
             let method_name_pool = &class.constant_pool[method.name_index as usize - 1];
-            let method_descriptor_pool = &class.constant_pool[method.descriptor_index as usize - 1];
-            let method_name: String;
-            let method_desc: Descriptor;
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_name_pool {
-                method_name = bytes.to_string();
+            let method_desc_pool = &class.constant_pool[method.descriptor_index as usize - 1];
+            let searching_name: String;
+            let searching_desc: String;
+            if let ConstantsPoolInfo::Utf8 { length, bytes } = method_name_pool {
+                searching_name = bytes.to_string();
             } else {
-                panic!("method name was not a utf8!");
+                panic!("method name was not a string!");
             }
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_descriptor_pool {
-                method_desc = Descriptor::new(bytes.to_string());
+            if let ConstantsPoolInfo::Utf8 { length, bytes } = method_desc_pool {
+               searching_desc = bytes.to_string(); 
             } else {
-                panic!("method descriptor was not a utf8!");
+                panic!("method desc was not a string!");
             }
-            if name == method_name && desc == method_desc {
+            println!("searching name: {}, for: {}", searching_name, method_name);
+            println!("searching desc: {}, for: {}", searching_desc, method_desc);
+            if searching_name == method_name && searching_desc == method_desc {
+                let descriptor = Descriptor::new(method_desc.clone());
                 for attribute in &method.attribute_info {
-                    if let Attribute::Code { common,
-                                             max_stack,
-                                             max_locals,
-                                             code_length,
-                                             code,
-                                             exception_table_length,
-                                             exception_table,
-                                             attribute_count,
-                                             attribute_info, } = attribute
-                    {
-                        return (Frame { class_handle: class.handle.unwrap(), method: name, ip: 0, code: code.to_vec(), locals: vec![], stack: vec![].into() },
-                                desc);
+                    if let Attribute::Code { common, max_stack, max_locals, code_length, code, exception_table_length, exception_table, attribute_count, attribute_info } = attribute {
+                        let locals: Vec<i32> = vec![0; *max_locals as usize];
+                        let stack: VecDeque<i32> = vec![0].into();
+                        return (Frame { class_handle: handle, method: method_name.clone(), ip: 0, code: code.to_vec(), locals, stack }, descriptor);
                     }
                 }
             }

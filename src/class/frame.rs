@@ -20,7 +20,10 @@ impl Frame {
         // either its a 32 bit int or its a void, type checking should catch this (in
         // the future, for now i'm just relying on the compiler) would rather
         // not do JIT yet...
-        self.locals = args.clone();
+        println!("Method: {}, locals len: {}", self.method, self.locals.len());
+        for index in 0..args.len() {
+            self.locals[index] = args[index];
+        }
         loop {
             let op = self.code[self.ip as usize];
             let class = running_in.get_class(self.class_handle);
@@ -118,6 +121,7 @@ impl Frame {
                 },
                 0x4B => {
                     let value = self.stack.pop_front().unwrap();
+                    println!("LOCALS LENGTH: {}", self.locals.len());
                     self.locals[0] = value;
                 },
                 0x57 => {
@@ -185,6 +189,32 @@ impl Frame {
                 0xB1 => {
                     return None;
                 },
+                0xB4 => {
+                    let indexbyte1 = self.code[(self.ip + 1) as usize];
+                    let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    let objectref = self.stack.pop_front().unwrap();
+                    let this_class = running_in.get_class(self.class_handle).clone();
+                    let instance = running_in.get_instance(objectref as usize);
+                    let field_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    if let ConstantsPoolInfo::FieldRef { class_index, name_and_type_index } = field_info {
+                        let class = &this_class.constant_pool[*class_index as usize - 1];
+                        /*if let ConstantsPoolInfo::Class { name_index } = class {
+                            let class_name = &this_class.constant_pool[*name_index as usize - 1];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes } = class_name {
+                                let class_handle = running_in.load_or_get_class_handle(bytes.to_string());
+                                let that_class = running_in.get_class(class_handle); // don't know if i need this right now.
+                            }
+                        }*/
+                        let name_and_type = &this_class.constant_pool[*name_and_type_index as usize - 1];
+                        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type {
+                            let name = &this_class.constant_pool[*name_index as usize - 1];
+                            if let ConstantsPoolInfo::Utf8 { length, bytes } = name {
+                                self.stack.push_back(instance.fields.get(&bytes.to_string()).expect("a").expect("b"));
+                            }
+                        }
+                    }
+                    self.ip += 2;
+                }
                 0xB5 => {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
@@ -253,6 +283,7 @@ impl Frame {
                 0xB8 => {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    println!("byte1: {}, byte2: {}, final: {}", indexbyte1, indexbyte2, (((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1);
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.constant_pool[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
                     if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {

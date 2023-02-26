@@ -34,10 +34,6 @@ public class Math extends MoreMath {
 		return a + b + c + d + e + f; // will get to this later.
 	}
 
-	public static void varargs(int... a) {
-		return;
-	}
-
 	public static int instantiate() {
 		Test test = new Test();
 		return test.zero();
