@@ -226,10 +226,10 @@ impl Class {
     }
 
     pub fn resolve_method(self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Class>, running_in: &mut Vastatrix)
-                         -> (Frame, Descriptor) {
+                          -> (Frame, Descriptor) {
         let class_index: u16;
         let name_and_type: u16;
-        if let ConstantsPoolInfo::MethodRef { class_index: cindex, name_and_type_index: ntindex } = method_info {
+        if let ConstantsPoolInfo::MethodRef { class_index: cindex, name_and_type_index: ntindex, } = method_info {
             if superclass {
                 class_index = class_in.as_ref().expect("superclass set without class_in?").super_class;
             } else {
@@ -242,16 +242,16 @@ impl Class {
         let method_name: String;
         let method_desc: String;
         let name_and_type_pool = &self.constant_pool[name_and_type as usize - 1];
-        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type_pool {
+        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_type_pool {
             let name_pool = &self.constant_pool[*name_index as usize - 1];
             let desc_pool = &self.constant_pool[*descriptor_index as usize - 1];
-            if let ConstantsPoolInfo::Utf8 { length, bytes } = name_pool {
+            if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
                 method_name = bytes.to_string();
             } else {
                 panic!("method name was not a string!");
             }
-            if let ConstantsPoolInfo::Utf8 { length, bytes } = desc_pool {
-               method_desc = bytes.to_string(); 
+            if let ConstantsPoolInfo::Utf8 { length, bytes, } = desc_pool {
+                method_desc = bytes.to_string();
             } else {
                 panic!("method desc was not a string!");
             }
@@ -265,28 +265,28 @@ impl Class {
                 let inclass = class_in.unwrap();
                 let superclass_pool = &inclass.constant_pool[inclass.super_class as usize - 1];
                 println!("superclass pool: {:?}", superclass_pool);
-                if let ConstantsPoolInfo::Class { name_index } = superclass_pool {
+                if let ConstantsPoolInfo::Class { name_index, } = superclass_pool {
                     let superclass_name_pool = &inclass.constant_pool[*name_index as usize - 1];
-                    if let ConstantsPoolInfo::Utf8 { length, bytes } = superclass_name_pool {
+                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = superclass_name_pool {
                         handle = running_in.load_or_get_class_handle(bytes.to_string());
                         println!("new class: {}", bytes.to_string());
                         class = running_in.get_class(handle).clone();
-                    }else {
+                    } else {
                         panic!("please set class_in :(");
                     }
-                }else {
+                } else {
                     panic!("please set class_in :(");
-                }    
+                }
             } else {
                 panic!("please set class_in :(");
             }
         } else {
             let class_pool = &self.constant_pool[class_index as usize - 1];
-            if let ConstantsPoolInfo::Class { name_index } = &class_pool {
+            if let ConstantsPoolInfo::Class { name_index, } = &class_pool {
                 let name_pool = &self.constant_pool[*name_index as usize - 1];
-                if let ConstantsPoolInfo::Utf8 { length, bytes } = name_pool {
-                   handle = running_in.load_or_get_class_handle(bytes.to_string());
-                   class = running_in.get_class(handle).clone(); 
+                if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
+                    handle = running_in.load_or_get_class_handle(bytes.to_string());
+                    class = running_in.get_class(handle).clone();
                 } else {
                     panic!();
                 }
@@ -299,13 +299,13 @@ impl Class {
             let method_desc_pool = &class.constant_pool[method.descriptor_index as usize - 1];
             let searching_name: String;
             let searching_desc: String;
-            if let ConstantsPoolInfo::Utf8 { length, bytes } = method_name_pool {
+            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_name_pool {
                 searching_name = bytes.to_string();
             } else {
                 panic!("method name was not a string!");
             }
-            if let ConstantsPoolInfo::Utf8 { length, bytes } = method_desc_pool {
-               searching_desc = bytes.to_string(); 
+            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_desc_pool {
+                searching_desc = bytes.to_string();
             } else {
                 panic!("method desc was not a string!");
             }
@@ -314,7 +314,16 @@ impl Class {
             if searching_name == method_name && searching_desc == method_desc {
                 let descriptor = Descriptor::new(method_desc.clone());
                 for attribute in &method.attribute_info {
-                    if let Attribute::Code { common, max_stack, max_locals, code_length, code, exception_table_length, exception_table, attribute_count, attribute_info } = attribute {
+                    if let Attribute::Code { common,
+                                             max_stack,
+                                             max_locals,
+                                             code_length,
+                                             code,
+                                             exception_table_length,
+                                             exception_table,
+                                             attribute_count,
+                                             attribute_info, } = attribute
+                    {
                         let locals: Vec<i32> = vec![0; *max_locals as usize];
                         let stack: VecDeque<i32> = vec![0].into();
                         return (Frame { class_handle: handle, method: method_name.clone(), ip: 0, code: code.to_vec(), locals, stack }, descriptor);

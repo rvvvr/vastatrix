@@ -214,7 +214,7 @@ impl Frame {
                         }
                     }
                     self.ip += 2;
-                }
+                },
                 0xB5 => {
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];

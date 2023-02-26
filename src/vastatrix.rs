@@ -11,7 +11,7 @@ use zip::ZipArchive;
 use crate::class::attribute::Attribute;
 use crate::class::frame::Frame;
 use crate::class::instance::Instance;
-use crate::class::method::{Descriptor, MethodType, self};
+use crate::class::method::{self, Descriptor, MethodType};
 use crate::class::{Class, ConstantsPoolInfo};
 
 #[derive(Debug)]
@@ -68,13 +68,13 @@ impl Vastatrix {
                     let desc_pool = &class.constant_pool[method.descriptor_index as usize - 1];
                     let mut name: String = "".to_string();
                     let mut desc: String = "".to_string();
-                    if let ConstantsPoolInfo::Utf8 { length, bytes } = name_pool {
+                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
                         name = bytes.to_string();
                     } else {
                         panic!("name was not a utf8!");
                     }
 
-                    if let ConstantsPoolInfo::Utf8 { length, bytes } = desc_pool {
+                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = desc_pool {
                         desc = bytes.to_string();
                     } else {
                         panic!("name was not a utf8!");
@@ -89,17 +89,19 @@ impl Vastatrix {
                     panic!("could not find main!");
                 }
                 for attribute in &method_info.unwrap().attribute_info {
-                    if let Attribute::Code { common, max_stack, max_locals, code_length, code, exception_table_length, exception_table, attribute_count, attribute_info } = attribute {
+                    if let Attribute::Code { common,
+                                             max_stack,
+                                             max_locals,
+                                             code_length,
+                                             code,
+                                             exception_table_length,
+                                             exception_table,
+                                             attribute_count,
+                                             attribute_info, } = attribute
+                    {
                         let locals: Vec<i32> = vec![0; *max_locals as usize];
                         let stack: VecDeque<i32> = vec![].into();
-                        let mut frame = Frame {
-                            class_handle: handle,
-                            method: "main".to_string(),
-                            ip: 0,
-                            code: code.to_vec(),
-                            locals,
-                            stack,
-                        };
+                        let mut frame = Frame { class_handle: handle, method: "main".to_string(), ip: 0, code: code.to_vec(), locals, stack };
                         drop(class);
                         frame.exec(vec![], self);
                         break;
