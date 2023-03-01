@@ -5,3 +5,10 @@ pub mod instance;
 pub mod method;
 
 pub use definition::*;
+
+pub fn resolve_static(constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()> {
+    if let ConstantsPoolInfo::Utf8 { length, bytes } = &constant_pool[index as usize - 1] {
+        return Ok(bytes.to_string())
+    }
+    Err(())
+}

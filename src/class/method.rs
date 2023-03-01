@@ -23,16 +23,14 @@ pub enum MethodType {
     Float,
     Int,
     Long,
-    ClassReference,
+    ClassReference { classpath: String },
     Short,
     Boolean,
-    ArrayReference(Box<MethodType>),
 }
 
 impl Trace<VTXObject> for MethodType {
     fn trace(&self, tracer: &mut Tracer<VTXObject>) {
         match self {
-            Self::ArrayReference(elements) => elements.trace(tracer),
             _ => {},
         }
     }
@@ -53,7 +51,9 @@ impl Descriptor {
                     inarg = false;
                 },
                 'L' => {
-                    panic!("no classes.")
+                    if inarg {
+                        types.push(MethodType::ClassReference {classpath: "".to_string()} )
+                    }
                 },
                 'I' =>
                     if inarg {
@@ -135,8 +135,27 @@ impl Descriptor {
                             panic!("can only return one type!");
                         }
                     },
+                'V' => {
+                    if inarg {
+                        panic!("no void in args!!");
+                    } else {
+                        if let None = returns {
+                            returns = Some(MethodType::Void);
+                        } else {
+                            panic!("can only return one type!");
+                        }
+                    }
+                }
                 '[' => {
-                    panic!("no varargs yet");
+                    if inarg {
+                        types.push(MethodType::ClassReference { classpath: "java/lang/Array".to_string()})
+                    } else {
+                        if let None = returns {
+                            returns = Some(MethodType::ClassReference { classpath: "java/lang/Array".to_string()});
+                        } else {
+                            panic!("can only return one type!");
+                        }
+                    }
                 },
                 _ => {},
             }
@@ -175,7 +194,7 @@ impl Argument {
     pub fn new(value: impl Num + 'static, is: MethodType) -> Self { Self { value: Box::new(value), is } }
 
     pub fn value_ref(&mut self) -> u32 {
-        if self.is == MethodType::ClassReference {
+        if let MethodType::ClassReference {..} = self.is {
             return *self.value.as_any().downcast_ref::<u32>().unwrap();
         }
         panic!("value was not a ref! was a {:?}", self.is);

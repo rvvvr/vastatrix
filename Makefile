@@ -1,5 +1,7 @@
+SHELL=/bin/fish
+
 JAVAC 	:= javac
-JAVACFLAGS := -d testy/build --patch-module java.base=./
+JAVACFLAGS := -d testy/build --patch-module java.base=./ **/*.java
 JAR		:= jar
 
 SOURCEDIR := testy
@@ -15,12 +17,12 @@ all: clean $(OUT) test
 test:
 	cargo run -- --jar $(OUT)
 
-$(OUT): $(CLASSES)
+$(OUT): classes
 	cd testy/build && $(JAR) cvfe $(OUT) $(MAIN) *
 	mv testy/build/$(OUT) ./$(OUT)
 
-%.class: %.java
-	$(JAVAC) $(JAVACFLAGS) $<
+classes: 
+	$(JAVAC) $(JAVACFLAGS)
 
 clean: 
 	rm -rf testy/build/*

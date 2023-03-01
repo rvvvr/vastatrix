@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
 use std::ops::Deref;
@@ -12,11 +13,12 @@ use crate::class::attribute::Attribute;
 use crate::class::frame::Frame;
 use crate::class::instance::Instance;
 use crate::class::method::{self, Argument, Descriptor, MethodType};
-use crate::class::{Class, ConstantsPoolInfo};
+use crate::class::{Class, ConstantsPoolInfo, ClassFile};
+
 
 #[derive(Debug)]
 pub enum VTXObject {
-    Class(Class),
+    Class(Box<dyn Class>),
     Instance(Instance),
     Array(Vec<MethodType>),
 }
@@ -63,9 +65,9 @@ impl Vastatrix {
                 let class = self.get_class(handle);
                 let maindesc = "([Ljava/lang/String;)V".to_string();
                 let mut method_info = None;
-                for method in &class.methods {
-                    let name_pool = &class.constant_pool[method.name_index as usize - 1];
-                    let desc_pool = &class.constant_pool[method.descriptor_index as usize - 1];
+                for method in &class.get_methods() {
+                    let name_pool = &class.get_constant_pool()[method.name_index as usize - 1];
+                    let desc_pool = &class.get_constant_pool()[method.descriptor_index as usize - 1];
                     let mut name: String = "".to_string();
                     let mut desc: String = "".to_string();
                     if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
@@ -81,7 +83,7 @@ impl Vastatrix {
                     }
                     println!("name: {}, desc: {}", name, desc);
                     if name == "main".to_string() && desc == maindesc {
-                        method_info = Some(method);
+                        method_info = Some(method.clone());
                         break;
                     }
                 }
@@ -121,8 +123,8 @@ impl Vastatrix {
         let mut class_buf: Vec<u8> = vec![];
         class_file.read_to_end(&mut class_buf).unwrap();
         let bytes = Bytes::from(class_buf);
-        let class = Class::new(bytes);
-        let handle = self.heap.insert_temp(VTXObject::Class(class));
+        let class = ClassFile::new(bytes);
+        let handle = self.heap.insert_temp(VTXObject::Class(Box::new(class)));
         self.class_handles.insert(classpath, handle);
         if let VTXObject::Class(cls) = self.heap.get_mut(handle).unwrap() {
             cls.set_handle(handle);
@@ -130,23 +132,23 @@ impl Vastatrix {
         handle
     }
 
-    pub fn get_class(&mut self, handle: Handle<VTXObject>) -> &mut Class {
-        if let VTXObject::Class(class) = self.heap.get_mut(handle).unwrap() {
-            return class;
+    pub fn get_class(&mut self, handle: Handle<VTXObject>) -> Box<dyn Class + 'static> {
+        if let VTXObject::Class(class) = self.heap.get(handle).unwrap() {
+            return class.clone();
         }
         panic!("could not get class!");
     }
 
-    pub fn prepare_instance(&mut self, class: &mut Class) -> u32 {
+    pub fn prepare_instance(&mut self, class: &mut Box<dyn Class>) -> u32 {
         let mut instance = Instance::new();
-        for field in &class.fields {
-            let name = &class.constant_pool[field.name_index as usize - 1];
+        for field in &class.get_fields() {
+            let name = &class.get_constant_pool()[field.name_index as usize - 1];
             if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
                 println!("field name: {}", bytes);
                 if field.access_flags & 0x0008 != 0 {
                     for attribute in &field.attribute_info {
                         if let Attribute::ConstantValue { common, constantvalue_index, } = attribute {
-                            let constantvalue = &class.constant_pool[*constantvalue_index as usize - 1];
+                            let constantvalue = &class.get_constant_pool()[*constantvalue_index as usize - 1];
                             match constantvalue {
                                 _ => panic!("constantvalue_index did not index a valid constant value!"),
                             }

@@ -1,7 +1,9 @@
 use std::collections::VecDeque;
+use std::fmt::Debug;
 
 use broom::Handle;
 use bytes::{Buf, Bytes};
+use dyn_clone::{DynClone, clone_trait_object};
 
 use super::frame::Frame;
 use super::method::Descriptor;
@@ -9,24 +11,49 @@ use crate::class::attribute::{Attribute, AttributeCommon};
 use crate::class::method::{Argument, MethodType};
 use crate::vastatrix::{VTXObject, Vastatrix};
 
+pub trait Class: DynClone + Debug{
+    fn set_handle(&mut self, handle: Handle<VTXObject>);
+    fn get_handle(&self) -> Handle<VTXObject>;
+    fn get_magic(&self) -> u32;
+    fn get_minor(&self) -> u16;
+    fn get_major(&self) -> u16;
+    fn get_constant_count(&self) -> u16;
+    fn get_constant_pool(&self) -> Vec<ConstantsPoolInfo>;
+    fn get_access_flags(&self) -> u16;
+    fn get_this_class(&self) -> u16;
+    fn get_super_class(&self) -> u16;
+    fn get_interface_count(&self) -> u16;
+    fn get_interfaces(&self) -> Vec<u16>;
+    fn get_field_count(&self) -> u16;
+    fn get_fields(&self) -> Vec<FieldInfo>;
+    fn get_method_count(&self) -> u16;
+    fn get_methods(&self) -> Vec<MethodInfo>;
+    fn get_attribute_count(&self) -> u16;
+    fn get_attributes(&self) -> Vec<Attribute>;
+    fn resolve(&self, constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()>;
+    fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix) -> (Frame, Descriptor); 
+}
+
+clone_trait_object!(Class);
+
 #[derive(Debug, Clone)]
-pub struct Class {
-    pub magic:            u32,
-    pub minor:            u16,
-    pub major:            u16,
-    pub constant_count:   u16,
-    pub constant_pool:    Vec<ConstantsPoolInfo>,
-    pub access_flags:     u16,
-    pub this_class:       u16,
-    pub super_class:      u16,
-    pub interfaces_count: u16,
-    pub interfaces:       Vec<u16>,
-    pub fields_count:     u16,
-    pub fields:           Vec<FieldInfo>,
-    pub methods_count:    u16,
-    pub methods:          Vec<MethodInfo>,
-    pub attribute_count:  u16,
-    pub attributes:       Vec<Attribute>,
+pub struct ClassFile {
+    magic:            u32,
+    minor:            u16,
+    major:            u16,
+    constant_count:   u16,
+    constant_pool:    Vec<ConstantsPoolInfo>,
+    access_flags:     u16,
+    this_class:       u16,
+    super_class:      u16,
+    interfaces_count: u16,
+    interfaces:       Vec<u16>,
+    fields_count:     u16,
+    fields:           Vec<FieldInfo>,
+    methods_count:    u16,
+    methods:          Vec<MethodInfo>,
+    attribute_count:  u16,
+    attributes:       Vec<Attribute>,
     handle:               Option<Handle<VTXObject>>,
 }
 
@@ -77,7 +104,7 @@ pub struct AttributeInfo {
     pub info:                 Vec<u8>,
 }
 
-impl Class {
+impl ClassFile {
     pub fn new(mut bytes: Bytes) -> Self {
         let magic = bytes.get_u32();
         println!("MAGIC: {:x}", magic);
@@ -219,20 +246,23 @@ impl Class {
                attributes,
                handle: None }
     }
+}
 
-    pub fn set_handle(&mut self, handle: Handle<VTXObject>) { self.handle = Some(handle); }
 
-    pub fn resolve(constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()> {
+impl Class for ClassFile {
+    fn set_handle(&mut self, handle: Handle<VTXObject>) { self.handle = Some(handle); }   
+
+    fn resolve(&self, constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()> {
         if let ConstantsPoolInfo::Utf8 { bytes, .. } = &constant_pool[index as usize - 1] { Ok(bytes.to_string()) } else { Err(()) }
-    }
+    } 
 
-    pub fn resolve_method(self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Class>, running_in: &mut Vastatrix)
+    fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix)
                           -> (Frame, Descriptor) {
         let class_index: u16;
         let name_and_type: u16;
         if let ConstantsPoolInfo::MethodRef { class_index: cindex, name_and_type_index: ntindex, } = method_info {
             if superclass {
-                class_index = class_in.as_ref().expect("superclass set without class_in?").super_class;
+                class_index = class_in.as_ref().expect("superclass set without class_in?").get_super_class();
             } else {
                 class_index = cindex;
             }
@@ -259,19 +289,18 @@ impl Class {
         } else {
             panic!("nameandtype was not a nameandtype!");
         }
-        let class: Class;
         let handle: Handle<VTXObject>;
-        if superclass {
+        let class = if superclass {
             if class_in.is_some() {
                 let inclass = class_in.unwrap();
-                let superclass_pool = &inclass.constant_pool[inclass.super_class as usize - 1];
+                let superclass_pool = &inclass.get_constant_pool()[inclass.get_super_class() as usize - 1];
                 println!("superclass pool: {:?}", superclass_pool);
                 if let ConstantsPoolInfo::Class { name_index, } = superclass_pool {
-                    let superclass_name_pool = &inclass.constant_pool[*name_index as usize - 1];
+                    let superclass_name_pool = &inclass.get_constant_pool()[*name_index as usize - 1];
                     if let ConstantsPoolInfo::Utf8 { length, bytes, } = superclass_name_pool {
                         handle = running_in.load_or_get_class_handle(bytes.to_string());
                         println!("new class: {}", bytes.to_string());
-                        class = running_in.get_class(handle).clone();
+                        running_in.get_class(handle)
                     } else {
                         panic!("please set class_in :(");
                     }
@@ -287,17 +316,17 @@ impl Class {
                 let name_pool = &self.constant_pool[*name_index as usize - 1];
                 if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
                     handle = running_in.load_or_get_class_handle(bytes.to_string());
-                    class = running_in.get_class(handle).clone();
+                    running_in.get_class(handle)
                 } else {
                     panic!();
                 }
             } else {
                 panic!();
             }
-        }
-        for method in &class.methods {
-            let method_name_pool = &class.constant_pool[method.name_index as usize - 1];
-            let method_desc_pool = &class.constant_pool[method.descriptor_index as usize - 1];
+        };
+        for method in &class.get_methods() {
+            let method_name_pool = &class.get_constant_pool()[method.name_index as usize - 1];
+            let method_desc_pool = &class.get_constant_pool()[method.descriptor_index as usize - 1];
             let searching_name: String;
             let searching_desc: String;
             if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_name_pool {
@@ -332,6 +361,74 @@ impl Class {
                 }
             }
         }
-        return self.resolve_method(method_info, true, Some(class.clone()), running_in);
+        return self.resolve_method(method_info, true, Some(Box::new(class.as_ref())), running_in);
+    }
+
+    fn get_handle(&self) -> Handle<VTXObject> {
+        self.handle.unwrap()
+    }
+
+    fn get_magic(&self) -> u32 {
+        self.magic
+    }
+
+    fn get_minor(&self) -> u16 {
+        self.minor
+    }
+
+    fn get_major(&self) -> u16 {
+        self.major
+    }
+
+    fn get_constant_count(&self) -> u16 {
+        self.constant_count
+    }
+
+    fn get_constant_pool(&self) -> Vec<ConstantsPoolInfo> {
+        self.constant_pool.clone()
+    }
+
+    fn get_access_flags(&self) -> u16 {
+        self.access_flags
+    }
+
+    fn get_this_class(&self) -> u16 {
+        self.this_class
+    }
+
+    fn get_super_class(&self) -> u16 {
+        self.super_class
+    }
+
+    fn get_interface_count(&self) -> u16 {
+        self.interfaces_count
+    }
+
+    fn get_interfaces(&self) -> Vec<u16> {
+        self.interfaces.clone()
+    }
+
+    fn get_field_count(&self) -> u16 {
+        self.fields_count
+    }
+
+    fn get_fields(&self) -> Vec<FieldInfo> {
+        self.fields.clone()
+    }
+
+    fn get_method_count(&self) -> u16 {
+        self.methods_count
+    }
+
+    fn get_methods(&self) -> Vec<MethodInfo> {
+        self.methods.clone()
+    }
+
+    fn get_attribute_count(&self) -> u16 {
+        self.attribute_count
+    }
+
+    fn get_attributes(&self) -> Vec<Attribute> {
+        self.attributes.clone()
     }
 }

@@ -1,6 +1,6 @@
 use bytes::{Buf, Bytes};
 
-use super::{Class, ConstantsPoolInfo};
+use super::{Class, ConstantsPoolInfo, resolve_static};
 
 #[derive(Debug, Clone)]
 pub enum Attribute {
@@ -320,7 +320,7 @@ pub enum VerificationType {
 
 impl Attribute {
     pub fn parse(mut bytes: Bytes, constants: Vec<ConstantsPoolInfo>, common: AttributeCommon, location: AttributeLocation) -> Attribute {
-        match Class::resolve(constants.clone(), common.attribute_name_index).unwrap().as_str() {
+        match resolve_static(constants.clone(), common.attribute_name_index).unwrap().as_str() {
             "ConstantValue" => {
                 match location {
                     AttributeLocation::FieldInfo => {},
