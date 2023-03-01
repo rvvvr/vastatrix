@@ -7,7 +7,12 @@ use crate::class::method::MethodType;
 use crate::class::ConstantsPoolInfo;
 use crate::vastatrix::{VTXObject, Vastatrix};
 
-pub struct Frame {
+pub trait Frame: core::fmt::Debug {
+    fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument;  
+}
+
+#[derive(Debug)]
+pub struct BytecodeFrame {
     pub class_handle: Handle<VTXObject>,
     pub method:       String,
     pub ip:           u32,
@@ -16,8 +21,8 @@ pub struct Frame {
     pub stack:        VecDeque<Argument>,
 }
 
-impl Frame {
-    pub fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument {
+impl Frame for BytecodeFrame {
+    fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument {
         // either its a 32 bit int or its a void, type checking should catch this (in
         // the future, for now i'm just relying on the compiler) would rather
         // not do JIT yet...

@@ -10,7 +10,7 @@ use bytes::Bytes;
 use zip::ZipArchive;
 
 use crate::class::attribute::Attribute;
-use crate::class::frame::Frame;
+use crate::class::frame::{Frame, BytecodeFrame};
 use crate::class::instance::Instance;
 use crate::class::method::{self, Argument, Descriptor, MethodType};
 use crate::class::{Class, ConstantsPoolInfo, ClassFile};
@@ -103,7 +103,7 @@ impl Vastatrix {
                     {
                         let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
                         let stack: VecDeque<Argument> = vec![].into();
-                        let mut frame = Frame { class_handle: handle, method: "main".to_string(), ip: 0, code: code.to_vec(), locals, stack };
+                        let mut frame = BytecodeFrame { class_handle: handle, method: "main".to_string(), ip: 0, code: code.to_vec(), locals, stack };
                         drop(class);
                         frame.exec(vec![], self);
                         break;

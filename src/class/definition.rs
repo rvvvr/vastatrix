@@ -5,7 +5,7 @@ use broom::Handle;
 use bytes::{Buf, Bytes};
 use dyn_clone::{DynClone, clone_trait_object};
 
-use super::frame::Frame;
+use super::frame::{Frame, BytecodeFrame};
 use super::method::Descriptor;
 use crate::class::attribute::{Attribute, AttributeCommon};
 use crate::class::method::{Argument, MethodType};
@@ -31,7 +31,7 @@ pub trait Class: DynClone + Debug{
     fn get_attribute_count(&self) -> u16;
     fn get_attributes(&self) -> Vec<Attribute>;
     fn resolve(&self, constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()>;
-    fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix) -> (Frame, Descriptor); 
+    fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix) -> (Box<dyn Frame>, Descriptor); 
 }
 
 clone_trait_object!(Class);
@@ -257,7 +257,7 @@ impl Class for ClassFile {
     } 
 
     fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix)
-                          -> (Frame, Descriptor) {
+                          -> (Box<(dyn Frame + 'static)>, Descriptor) {
         let class_index: u16;
         let name_and_type: u16;
         if let ConstantsPoolInfo::MethodRef { class_index: cindex, name_and_type_index: ntindex, } = method_info {
@@ -356,7 +356,7 @@ impl Class for ClassFile {
                     {
                         let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
                         let stack: VecDeque<Argument> = vec![].into();
-                        return (Frame { class_handle: handle, method: method_name.clone(), ip: 0, code: code.to_vec(), locals, stack }, descriptor);
+                        return (Box::new(BytecodeFrame { class_handle: handle, method: method_name.clone(), ip: 0, code: code.to_vec(), locals, stack }), descriptor);
                     }
                 }
             }
