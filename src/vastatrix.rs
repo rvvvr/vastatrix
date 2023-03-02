@@ -2,7 +2,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
-use std::ops::Deref;
 
 use broom::trace::Trace;
 use broom::Handle;
@@ -12,7 +11,7 @@ use zip::ZipArchive;
 use crate::class::attribute::Attribute;
 use crate::class::frame::{Frame, BytecodeFrame};
 use crate::class::instance::Instance;
-use crate::class::method::{self, Argument, Descriptor, MethodType};
+use crate::class::method::{Argument, MethodType};
 use crate::class::{Class, ConstantsPoolInfo, ClassFile};
 
 
@@ -56,7 +55,6 @@ impl Vastatrix {
         drop(archive);
         for line in manifest.lines() {
             if line.starts_with("Main-Class") {
-                let archive = &mut self.archive;
                 let split: Vec<&str> = line.split(' ').collect();
                 let class = split.get(1).unwrap();
                 let class_vec: Vec<&str> = class.split('.').collect();
@@ -68,15 +66,15 @@ impl Vastatrix {
                 for method in &class.get_methods() {
                     let name_pool = &class.get_constant_pool()[method.name_index as usize - 1];
                     let desc_pool = &class.get_constant_pool()[method.descriptor_index as usize - 1];
-                    let mut name: String = "".to_string();
-                    let mut desc: String = "".to_string();
-                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
+                    let name: String;
+                    let desc: String;
+                    if let ConstantsPoolInfo::Utf8 { bytes, .. } = name_pool {
                         name = bytes.to_string();
                     } else {
                         panic!("name was not a utf8!");
                     }
 
-                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = desc_pool {
+                    if let ConstantsPoolInfo::Utf8 { bytes, .. } = desc_pool {
                         desc = bytes.to_string();
                     } else {
                         panic!("name was not a utf8!");
@@ -91,15 +89,8 @@ impl Vastatrix {
                     panic!("could not find main!");
                 }
                 for attribute in &method_info.unwrap().attribute_info {
-                    if let Attribute::Code { common,
-                                             max_stack,
-                                             max_locals,
-                                             code_length,
-                                             code,
-                                             exception_table_length,
-                                             exception_table,
-                                             attribute_count,
-                                             attribute_info, } = attribute
+                    if let Attribute::Code { max_locals,
+                                             code,.. } = attribute
                     {
                         let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
                         let stack: VecDeque<Argument> = vec![].into();
@@ -143,11 +134,11 @@ impl Vastatrix {
         let mut instance = Instance::new();
         for field in &class.get_fields() {
             let name = &class.get_constant_pool()[field.name_index as usize - 1];
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
+            if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                 println!("field name: {}", bytes);
                 if field.access_flags & 0x0008 != 0 {
                     for attribute in &field.attribute_info {
-                        if let Attribute::ConstantValue { common, constantvalue_index, } = attribute {
+                        if let Attribute::ConstantValue { constantvalue_index, .. } = attribute {
                             let constantvalue = &class.get_constant_pool()[*constantvalue_index as usize - 1];
                             match constantvalue {
                                 _ => panic!("constantvalue_index did not index a valid constant value!"),

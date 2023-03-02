@@ -1,7 +1,6 @@
 use std::any::Any;
 use std::fmt::Debug;
 use std::ops::AddAssign;
-use std::rc::Rc;
 
 use broom::trace::{Trace, Tracer};
 use dyn_clone::{clone_trait_object, DynClone};
@@ -29,7 +28,7 @@ pub enum MethodType {
 }
 
 impl Trace<VTXObject> for MethodType {
-    fn trace(&self, tracer: &mut Tracer<VTXObject>) {
+    fn trace(&self, _tracer: &mut Tracer<VTXObject>) {
         match self {
             _ => {},
         }
@@ -287,7 +286,7 @@ impl PartialOrd<Argument> for Argument {
 
 impl AddAssign<i32> for Argument {
     fn add_assign(&mut self, rhs: i32) {
-        if (self.is != MethodType::Int) {
+        if self.is != MethodType::Int {
             panic!("Adding int to {:?}", self.is)
         }
         let total = self.value.as_any().downcast_ref::<i32>().unwrap() + rhs;

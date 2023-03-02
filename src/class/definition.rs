@@ -6,7 +6,7 @@ use bytes::{Buf, Bytes};
 use dyn_clone::{DynClone, clone_trait_object};
 
 use super::frame::{Frame, BytecodeFrame};
-use super::method::Descriptor;
+use super::method::{Descriptor};
 use crate::class::attribute::{Attribute, AttributeCommon};
 use crate::class::method::{Argument, MethodType};
 use crate::vastatrix::{VTXObject, Vastatrix};
@@ -32,6 +32,7 @@ pub trait Class: DynClone + Debug{
     fn get_attributes(&self) -> Vec<Attribute>;
     fn resolve(&self, constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()>;
     fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix) -> (Box<dyn Frame>, Descriptor); 
+    fn create_frame(&self, name: String, desc: String) -> Option<Box<dyn Frame>>;
 }
 
 clone_trait_object!(Class);
@@ -276,12 +277,12 @@ impl Class for ClassFile {
         if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_type_pool {
             let name_pool = &self.constant_pool[*name_index as usize - 1];
             let desc_pool = &self.constant_pool[*descriptor_index as usize - 1];
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
+            if let ConstantsPoolInfo::Utf8 { bytes, .. } = name_pool {
                 method_name = bytes.to_string();
             } else {
                 panic!("method name was not a string!");
             }
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = desc_pool {
+            if let ConstantsPoolInfo::Utf8 { bytes, .. } = desc_pool {
                 method_desc = bytes.to_string();
             } else {
                 panic!("method desc was not a string!");
@@ -297,7 +298,7 @@ impl Class for ClassFile {
                 println!("superclass pool: {:?}", superclass_pool);
                 if let ConstantsPoolInfo::Class { name_index, } = superclass_pool {
                     let superclass_name_pool = &inclass.get_constant_pool()[*name_index as usize - 1];
-                    if let ConstantsPoolInfo::Utf8 { length, bytes, } = superclass_name_pool {
+                    if let ConstantsPoolInfo::Utf8 { bytes, .. } = superclass_name_pool {
                         handle = running_in.load_or_get_class_handle(bytes.to_string());
                         println!("new class: {}", bytes.to_string());
                         running_in.get_class(handle)
@@ -314,7 +315,7 @@ impl Class for ClassFile {
             let class_pool = &self.constant_pool[class_index as usize - 1];
             if let ConstantsPoolInfo::Class { name_index, } = &class_pool {
                 let name_pool = &self.constant_pool[*name_index as usize - 1];
-                if let ConstantsPoolInfo::Utf8 { length, bytes, } = name_pool {
+                if let ConstantsPoolInfo::Utf8 { bytes, .. } = name_pool {
                     handle = running_in.load_or_get_class_handle(bytes.to_string());
                     running_in.get_class(handle)
                 } else {
@@ -324,42 +325,9 @@ impl Class for ClassFile {
                 panic!();
             }
         };
-        for method in &class.get_methods() {
-            let method_name_pool = &class.get_constant_pool()[method.name_index as usize - 1];
-            let method_desc_pool = &class.get_constant_pool()[method.descriptor_index as usize - 1];
-            let searching_name: String;
-            let searching_desc: String;
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_name_pool {
-                searching_name = bytes.to_string();
-            } else {
-                panic!("method name was not a string!");
-            }
-            if let ConstantsPoolInfo::Utf8 { length, bytes, } = method_desc_pool {
-                searching_desc = bytes.to_string();
-            } else {
-                panic!("method desc was not a string!");
-            }
-            println!("searching name: {}, for: {}", searching_name, method_name);
-            println!("searching desc: {}, for: {}", searching_desc, method_desc);
-            if searching_name == method_name && searching_desc == method_desc {
-                let descriptor = Descriptor::new(method_desc.clone());
-                for attribute in &method.attribute_info {
-                    if let Attribute::Code { common,
-                                             max_stack,
-                                             max_locals,
-                                             code_length,
-                                             code,
-                                             exception_table_length,
-                                             exception_table,
-                                             attribute_count,
-                                             attribute_info, } = attribute
-                    {
-                        let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
-                        let stack: VecDeque<Argument> = vec![].into();
-                        return (Box::new(BytecodeFrame { class_handle: handle, method: method_name.clone(), ip: 0, code: code.to_vec(), locals, stack }), descriptor);
-                    }
-                }
-            }
+        let frame_maybe = class.create_frame(method_name, method_desc.clone());
+        if frame_maybe.is_some() {
+            return (frame_maybe.unwrap(), Descriptor::new(method_desc));
         }
         return self.resolve_method(method_info, true, Some(Box::new(class.as_ref())), running_in);
     }
@@ -430,5 +398,32 @@ impl Class for ClassFile {
 
     fn get_attributes(&self) -> Vec<Attribute> {
         self.attributes.clone()
+    }
+
+    fn create_frame(&self, name: String, desc: String) -> Option<Box<dyn Frame>> {
+        for method in &self.methods {
+            let method_name_pool = &self.constant_pool[method.name_index as usize - 1];
+            let method_desc_pool = &self.constant_pool[method.descriptor_index as usize - 1];
+            let method_name = if let ConstantsPoolInfo::Utf8 { bytes, .. } = method_name_pool {
+                bytes.to_string()
+            } else {
+                panic!("method name was not a string!");
+            };
+            let method_desc = if let ConstantsPoolInfo::Utf8 { bytes, ..} = method_desc_pool {
+                bytes.to_string()
+            } else {
+                panic!("method name was not a string!");
+            };
+            if method_name == name && method_desc == desc {
+                for attribute in &method.attribute_info {
+                    if let Attribute::Code { max_locals, code, ..} = attribute {
+                        let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
+                        let stack: VecDeque<Argument> = vec![].into();
+                        return Some(Box::new(BytecodeFrame { class_handle: self.handle.unwrap(), method: method_name, ip: 0, code: code.to_vec(), locals, stack }));
+                    }
+                }
+            }
+        }
+        return None;
     }
 }

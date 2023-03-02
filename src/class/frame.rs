@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use broom::Handle;
 
-use super::method::{Argument, Descriptor};
+use super::method::{Argument};
 use crate::class::method::MethodType;
 use crate::class::ConstantsPoolInfo;
 use crate::vastatrix::{VTXObject, Vastatrix};
@@ -36,7 +36,7 @@ impl Frame for BytecodeFrame {
             let this_class = &class.get_constant_pool()[class.get_this_class() as usize - 1];
             if let ConstantsPoolInfo::Class { name_index, } = this_class {
                 let name = &class.get_constant_pool()[*name_index as usize - 1];
-                if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
+                if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                     println!("class: {}, method: {}, opcode: 0x{:x}, current stack:{:?}", bytes.to_string(), self.method, op, self.stack);
                 }
             }
@@ -202,8 +202,8 @@ impl Frame for BytecodeFrame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let instance = running_in.get_instance(objectref.value_ref() as usize);
                     let field_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
-                    if let ConstantsPoolInfo::FieldRef { class_index, name_and_type_index } = field_info {
-                        let class = &this_class.get_constant_pool()[*class_index as usize - 1];
+                    if let ConstantsPoolInfo::FieldRef { name_and_type_index, ..} = field_info {
+                        //let class = &this_class.get_constant_pool()[*class_index as usize - 1];
                         /*if let ConstantsPoolInfo::Class { name_index } = class {
                             let class_name = &this_class.constant_pool[*name_index as usize - 1];
                             if let ConstantsPoolInfo::Utf8 { length, bytes } = class_name {
@@ -212,9 +212,9 @@ impl Frame for BytecodeFrame {
                             }
                         }*/
                         let name_and_type = &this_class.get_constant_pool()[*name_and_type_index as usize - 1];
-                        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type {
+                        if let ConstantsPoolInfo::NameAndType { name_index, .. } = name_and_type {
                             let name = &this_class.get_constant_pool()[*name_index as usize - 1];
-                            if let ConstantsPoolInfo::Utf8 { length, bytes } = name {
+                            if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                                 self.stack.push_back(instance.fields.get(&bytes.to_string()).expect("a").clone());
                             }
                         }
@@ -229,8 +229,8 @@ impl Frame for BytecodeFrame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let instance = running_in.get_instance(objectref.value_ref() as usize);
                     let field_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
-                    if let ConstantsPoolInfo::FieldRef { class_index, name_and_type_index } = field_info {
-                        let class = &this_class.get_constant_pool()[*class_index as usize - 1];
+                    if let ConstantsPoolInfo::FieldRef { name_and_type_index, .. } = field_info {
+                        //let class = &this_class.get_constant_pool()[*class_index as usize - 1];
                         /*if let ConstantsPoolInfo::Class { name_index } = class {
                             let class_name = &this_class.constant_pool[*name_index as usize - 1];
                             if let ConstantsPoolInfo::Utf8 { length, bytes } = class_name {
@@ -239,9 +239,9 @@ impl Frame for BytecodeFrame {
                             }
                         }*/
                         let name_and_type = &this_class.get_constant_pool()[*name_and_type_index as usize - 1];
-                        if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index } = name_and_type {
+                        if let ConstantsPoolInfo::NameAndType { name_index, .. } = name_and_type {
                             let name = &this_class.get_constant_pool()[*name_index as usize - 1];
-                            if let ConstantsPoolInfo::Utf8 { length, bytes } = name {
+                            if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                                 instance.fields.insert(bytes.to_string(), value);
                             }
                         }
@@ -254,14 +254,14 @@ impl Frame for BytecodeFrame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let objectref = self.stack.pop_front().unwrap();
                     let method_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
-                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
+                    if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
                         let mut args: Vec<Argument> = vec![objectref];
                         for _ in desc.types {
                             args.push(self.stack.pop_front().unwrap());
                         }
                         let back = method.exec(args, running_in);
-                        if (!back.void()) {
+                        if !back.void() {
                             self.stack.push_back(back);
                         }
                     }
@@ -274,14 +274,14 @@ impl Frame for BytecodeFrame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let objectref = self.stack.pop_front().unwrap();
                     let method_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
-                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
+                    if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
                         let mut args: Vec<Argument> = vec![objectref];
                         for _ in desc.types {
                             args.push(self.stack.pop_front().unwrap());
                         }
                         let back = method.exec(args, running_in);
-                        if (!back.void()) {
+                        if !back.void() {
                             self.stack.push_back(back);
                         }
                     }
@@ -293,14 +293,14 @@ impl Frame for BytecodeFrame {
                     println!("byte1: {}, byte2: {}, final: {}", indexbyte1, indexbyte2, (((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1);
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
-                    if let ConstantsPoolInfo::MethodRef { class_index, name_and_type_index, } = method_info {
+                    if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
                         let mut args: Vec<Argument> = vec![];
                         for _ in desc.types {
                             args.push(self.stack.pop_front().unwrap());
                         }
                         let back = method.exec(args, running_in);
-                        if (!back.void()) {
+                        if !back.void() {
                             self.stack.push_back(back);
                         }
                     } else {
@@ -315,7 +315,7 @@ impl Frame for BytecodeFrame {
                     let class_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
                     if let ConstantsPoolInfo::Class { name_index, } = class_info {
                         let name = &this_class.get_constant_pool()[*name_index as usize - 1];
-                        if let ConstantsPoolInfo::Utf8 { length, bytes, } = name {
+                        if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                             let handle = running_in.load_or_get_class_handle(bytes.to_string());
                             let mut class = running_in.get_class(handle).clone();
                             self.stack.push_back(Argument::new(running_in.prepare_instance(&mut class), MethodType::ClassReference {classpath: bytes.to_string()}));
