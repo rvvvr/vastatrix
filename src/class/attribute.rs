@@ -1,6 +1,6 @@
 use bytes::{Buf, Bytes};
 
-use super::{ConstantsPoolInfo, resolve_static};
+use super::{resolve_static, ConstantsPoolInfo};
 
 #[derive(Debug, Clone)]
 pub enum Attribute {

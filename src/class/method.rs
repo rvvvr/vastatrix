@@ -22,7 +22,7 @@ pub enum MethodType {
     Float,
     Int,
     Long,
-    ClassReference { classpath: String },
+    ClassReference { classpath: String, },
     Short,
     Boolean,
 }
@@ -49,11 +49,10 @@ impl Descriptor {
                 ')' => {
                     inarg = false;
                 },
-                'L' => {
+                'L' =>
                     if inarg {
-                        types.push(MethodType::ClassReference {classpath: "".to_string()} )
-                    }
-                },
+                        types.push(MethodType::ClassReference { classpath: "".to_string(), })
+                    },
                 'I' =>
                     if inarg {
                         types.push(MethodType::Int);
@@ -134,7 +133,7 @@ impl Descriptor {
                             panic!("can only return one type!");
                         }
                     },
-                'V' => {
+                'V' =>
                     if inarg {
                         panic!("no void in args!!");
                     } else {
@@ -143,19 +142,17 @@ impl Descriptor {
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                }
-                '[' => {
+                    },
+                '[' =>
                     if inarg {
-                        types.push(MethodType::ClassReference { classpath: "java/lang/Array".to_string()})
+                        types.push(MethodType::ClassReference { classpath: "java/lang/Array".to_string(), })
                     } else {
                         if let None = returns {
-                            returns = Some(MethodType::ClassReference { classpath: "java/lang/Array".to_string()});
+                            returns = Some(MethodType::ClassReference { classpath: "java/lang/Array".to_string(), });
                         } else {
                             panic!("can only return one type!");
                         }
-                    }
-                },
+                    },
                 _ => {},
             }
         }
@@ -193,7 +190,7 @@ impl Argument {
     pub fn new(value: impl Num + 'static, is: MethodType) -> Self { Self { value: Box::new(value), is } }
 
     pub fn value_ref(&mut self) -> u32 {
-        if let MethodType::ClassReference {..} = self.is {
+        if let MethodType::ClassReference { .. } = self.is {
             return *self.value.as_any().downcast_ref::<u32>().unwrap();
         }
         panic!("value was not a ref! was a {:?}", self.is);

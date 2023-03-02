@@ -3,15 +3,15 @@ use std::fmt::Debug;
 
 use broom::Handle;
 use bytes::{Buf, Bytes};
-use dyn_clone::{DynClone, clone_trait_object};
+use dyn_clone::{clone_trait_object, DynClone};
 
-use super::frame::{Frame, BytecodeFrame};
-use super::method::{Descriptor};
+use super::frame::{BytecodeFrame, Frame};
+use super::method::Descriptor;
 use crate::class::attribute::{Attribute, AttributeCommon};
 use crate::class::method::{Argument, MethodType};
 use crate::vastatrix::{VTXObject, Vastatrix};
 
-pub trait Class: DynClone + Debug{
+pub trait Class: DynClone + Debug {
     fn set_handle(&mut self, handle: Handle<VTXObject>);
     fn get_handle(&self) -> Handle<VTXObject>;
     fn get_magic(&self) -> u32;
@@ -31,7 +31,8 @@ pub trait Class: DynClone + Debug{
     fn get_attribute_count(&self) -> u16;
     fn get_attributes(&self) -> Vec<Attribute>;
     fn resolve(&self, constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()>;
-    fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix) -> (Box<dyn Frame>, Descriptor); 
+    fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix)
+                      -> (Box<dyn Frame>, Descriptor);
     fn create_frame(&self, name: String, desc: String) -> Option<Box<dyn Frame>>;
 }
 
@@ -55,7 +56,7 @@ pub struct ClassFile {
     methods:          Vec<MethodInfo>,
     attribute_count:  u16,
     attributes:       Vec<Attribute>,
-    handle:               Option<Handle<VTXObject>>,
+    handle:           Option<Handle<VTXObject>>,
 }
 
 #[repr(u8)]
@@ -249,16 +250,15 @@ impl ClassFile {
     }
 }
 
-
 impl Class for ClassFile {
-    fn set_handle(&mut self, handle: Handle<VTXObject>) { self.handle = Some(handle); }   
+    fn set_handle(&mut self, handle: Handle<VTXObject>) { self.handle = Some(handle); }
 
     fn resolve(&self, constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()> {
         if let ConstantsPoolInfo::Utf8 { bytes, .. } = &constant_pool[index as usize - 1] { Ok(bytes.to_string()) } else { Err(()) }
-    } 
+    }
 
     fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix)
-                          -> (Box<(dyn Frame + 'static)>, Descriptor) {
+                      -> (Box<(dyn Frame + 'static)>, Descriptor) {
         let class_index: u16;
         let name_and_type: u16;
         if let ConstantsPoolInfo::MethodRef { class_index: cindex, name_and_type_index: ntindex, } = method_info {
@@ -332,73 +332,39 @@ impl Class for ClassFile {
         return self.resolve_method(method_info, true, Some(Box::new(class.as_ref())), running_in);
     }
 
-    fn get_handle(&self) -> Handle<VTXObject> {
-        self.handle.unwrap()
-    }
+    fn get_handle(&self) -> Handle<VTXObject> { self.handle.unwrap() }
 
-    fn get_magic(&self) -> u32 {
-        self.magic
-    }
+    fn get_magic(&self) -> u32 { self.magic }
 
-    fn get_minor(&self) -> u16 {
-        self.minor
-    }
+    fn get_minor(&self) -> u16 { self.minor }
 
-    fn get_major(&self) -> u16 {
-        self.major
-    }
+    fn get_major(&self) -> u16 { self.major }
 
-    fn get_constant_count(&self) -> u16 {
-        self.constant_count
-    }
+    fn get_constant_count(&self) -> u16 { self.constant_count }
 
-    fn get_constant_pool(&self) -> Vec<ConstantsPoolInfo> {
-        self.constant_pool.clone()
-    }
+    fn get_constant_pool(&self) -> Vec<ConstantsPoolInfo> { self.constant_pool.clone() }
 
-    fn get_access_flags(&self) -> u16 {
-        self.access_flags
-    }
+    fn get_access_flags(&self) -> u16 { self.access_flags }
 
-    fn get_this_class(&self) -> u16 {
-        self.this_class
-    }
+    fn get_this_class(&self) -> u16 { self.this_class }
 
-    fn get_super_class(&self) -> u16 {
-        self.super_class
-    }
+    fn get_super_class(&self) -> u16 { self.super_class }
 
-    fn get_interface_count(&self) -> u16 {
-        self.interfaces_count
-    }
+    fn get_interface_count(&self) -> u16 { self.interfaces_count }
 
-    fn get_interfaces(&self) -> Vec<u16> {
-        self.interfaces.clone()
-    }
+    fn get_interfaces(&self) -> Vec<u16> { self.interfaces.clone() }
 
-    fn get_field_count(&self) -> u16 {
-        self.fields_count
-    }
+    fn get_field_count(&self) -> u16 { self.fields_count }
 
-    fn get_fields(&self) -> Vec<FieldInfo> {
-        self.fields.clone()
-    }
+    fn get_fields(&self) -> Vec<FieldInfo> { self.fields.clone() }
 
-    fn get_method_count(&self) -> u16 {
-        self.methods_count
-    }
+    fn get_method_count(&self) -> u16 { self.methods_count }
 
-    fn get_methods(&self) -> Vec<MethodInfo> {
-        self.methods.clone()
-    }
+    fn get_methods(&self) -> Vec<MethodInfo> { self.methods.clone() }
 
-    fn get_attribute_count(&self) -> u16 {
-        self.attribute_count
-    }
+    fn get_attribute_count(&self) -> u16 { self.attribute_count }
 
-    fn get_attributes(&self) -> Vec<Attribute> {
-        self.attributes.clone()
-    }
+    fn get_attributes(&self) -> Vec<Attribute> { self.attributes.clone() }
 
     fn create_frame(&self, name: String, desc: String) -> Option<Box<dyn Frame>> {
         for method in &self.methods {
@@ -409,17 +375,22 @@ impl Class for ClassFile {
             } else {
                 panic!("method name was not a string!");
             };
-            let method_desc = if let ConstantsPoolInfo::Utf8 { bytes, ..} = method_desc_pool {
+            let method_desc = if let ConstantsPoolInfo::Utf8 { bytes, .. } = method_desc_pool {
                 bytes.to_string()
             } else {
                 panic!("method name was not a string!");
             };
             if method_name == name && method_desc == desc {
                 for attribute in &method.attribute_info {
-                    if let Attribute::Code { max_locals, code, ..} = attribute {
+                    if let Attribute::Code { max_locals, code, .. } = attribute {
                         let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
                         let stack: VecDeque<Argument> = vec![].into();
-                        return Some(Box::new(BytecodeFrame { class_handle: self.handle.unwrap(), method: method_name, ip: 0, code: code.to_vec(), locals, stack }));
+                        return Some(Box::new(BytecodeFrame { class_handle: self.handle.unwrap(),
+                                                             method: method_name,
+                                                             ip: 0,
+                                                             code: code.to_vec(),
+                                                             locals,
+                                                             stack }));
                     }
                 }
             }

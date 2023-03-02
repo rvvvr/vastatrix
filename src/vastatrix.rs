@@ -9,11 +9,10 @@ use bytes::Bytes;
 use zip::ZipArchive;
 
 use crate::class::attribute::Attribute;
-use crate::class::frame::{Frame, BytecodeFrame};
+use crate::class::frame::{BytecodeFrame, Frame};
 use crate::class::instance::Instance;
 use crate::class::method::{Argument, MethodType};
-use crate::class::{Class, ConstantsPoolInfo, ClassFile};
-
+use crate::class::{Class, ClassFile, ConstantsPoolInfo};
 
 #[derive(Debug)]
 pub enum VTXObject {
@@ -89,9 +88,7 @@ impl Vastatrix {
                     panic!("could not find main!");
                 }
                 for attribute in &method_info.unwrap().attribute_info {
-                    if let Attribute::Code { max_locals,
-                                             code,.. } = attribute
-                    {
+                    if let Attribute::Code { max_locals, code, .. } = attribute {
                         let locals: Vec<Argument> = vec![Argument::new(0, MethodType::Void); *max_locals as usize];
                         let stack: VecDeque<Argument> = vec![].into();
                         let mut frame = BytecodeFrame { class_handle: handle, method: "main".to_string(), ip: 0, code: code.to_vec(), locals, stack };

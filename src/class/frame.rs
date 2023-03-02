@@ -2,13 +2,13 @@ use std::collections::VecDeque;
 
 use broom::Handle;
 
-use super::method::{Argument};
+use super::method::Argument;
 use crate::class::method::MethodType;
 use crate::class::ConstantsPoolInfo;
 use crate::vastatrix::{VTXObject, Vastatrix};
 
 pub trait Frame: core::fmt::Debug {
-    fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument;  
+    fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument;
 }
 
 #[derive(Debug)]
@@ -318,7 +318,8 @@ impl Frame for BytecodeFrame {
                         if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                             let handle = running_in.load_or_get_class_handle(bytes.to_string());
                             let mut class = running_in.get_class(handle).clone();
-                            self.stack.push_back(Argument::new(running_in.prepare_instance(&mut class), MethodType::ClassReference {classpath: bytes.to_string()}));
+                            self.stack.push_back(Argument::new(running_in.prepare_instance(&mut class),
+                                                               MethodType::ClassReference { classpath: bytes.to_string(), }));
                         }
                     }
                     self.ip += 2;
