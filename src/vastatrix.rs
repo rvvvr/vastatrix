@@ -9,10 +9,11 @@ use bytes::Bytes;
 use zip::ZipArchive;
 
 use crate::class::attribute::Attribute;
+use crate::class::classfile::ClassFile;
 use crate::class::frame::{BytecodeFrame, Frame};
 use crate::class::instance::Instance;
 use crate::class::method::{Argument, MethodType};
-use crate::class::{Class, ClassFile, ConstantsPoolInfo};
+use crate::class::{Class, ConstantsPoolInfo};
 
 #[derive(Debug)]
 pub enum VTXObject {
@@ -78,7 +79,7 @@ impl Vastatrix {
                     } else {
                         panic!("name was not a utf8!");
                     }
-                    println!("name: {}, desc: {}", name, desc);
+                    trace!("name: {}, desc: {}", name, desc);
                     if name == "main".to_string() && desc == maindesc {
                         method_info = Some(method.clone());
                         break;
@@ -106,7 +107,7 @@ impl Vastatrix {
             return *self.class_handles.get(&classpath).unwrap();
         }
         let archive = &mut self.archive;
-        println!("{}", classpath.clone());
+        info!("LOADING CLASS: {}", classpath.clone());
         let mut class_file = archive.by_name(&(classpath.clone() + ".class")).expect("Could not find class file!");
         let mut class_buf: Vec<u8> = vec![];
         class_file.read_to_end(&mut class_buf).unwrap();
@@ -132,7 +133,7 @@ impl Vastatrix {
         for field in &class.get_fields() {
             let name = &class.get_constant_pool()[field.name_index as usize - 1];
             if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
-                println!("field name: {}", bytes);
+                trace!("field name: {}", bytes);
                 if field.access_flags & 0x0008 != 0 {
                     for attribute in &field.attribute_info {
                         if let Attribute::ConstantValue { constantvalue_index, .. } = attribute {

@@ -1,4 +1,5 @@
 pub mod attribute;
+pub mod classfile;
 pub mod definition;
 pub mod frame;
 pub mod instance;
