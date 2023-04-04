@@ -42,7 +42,7 @@ impl ClassFile {
         trace!("MAJOR: {}", major);
         let constant_count = bytes.get_u16() - 1;
         trace!("CONSTANT COUNT: {}", constant_count);
-        let mut constant_pool: Vec<ConstantsPoolInfo> = vec![];
+        let mut constant_pool: Vec<ConstantsPoolInfo> = vec![ConstantsPoolInfo::Dummy];
         for _ in 0..constant_count {
             let tag = bytes.get_u8();
             trace!("TAG NUMBER: {}", tag);
@@ -105,9 +105,9 @@ impl ClassFile {
                                                      crate::class::attribute::AttributeLocation::FieldInfo))
                 // let mut info = vec![];
                 // for _ in 0..attribute_length {
-                //     info.push(bytes.get_u8());
+                //     info.push_back(bytes.get_u8());
                 // }
-                // attribute_info.push(AttributeInfo {attribute_name_index,
+                // attribute_info.push_back(AttributeInfo {attribute_name_index,
                 // attribute_length, info});
             }
             fields.push(FieldInfo { access_flags: aflags, name_index: namedex, descriptor_index: descdex, attribute_count, attribute_info })
@@ -131,9 +131,9 @@ impl ClassFile {
                                                      crate::class::attribute::AttributeLocation::MethodInfo))
                 // let mut info = vec![];
                 // for _ in 0..attribute_length {
-                //     info.push(bytes.get_u8());
+                //     info.push_back(bytes.get_u8());
                 // }
-                // attribute_info.push(AttributeInfo {attribute_name_index,
+                // attribute_info.push_back(AttributeInfo {attribute_name_index,
                 // attribute_length, info});
             }
             trace!("method info: {:?}", attribute_info);
@@ -151,9 +151,9 @@ impl ClassFile {
                                              crate::class::attribute::AttributeLocation::ClassFile))
             // let mut info = vec![];
             // for _ in 0..attribute_length {
-            //     info.push(bytes.get_u8());
+            //     info.push_back(bytes.get_u8());
             // }
-            // attributes.push(AttributeInfo {attribute_name_index,
+            // attributes.push_back(AttributeInfo {attribute_name_index,
             // attribute_length, info});
         }
         Self { magic,
@@ -180,7 +180,7 @@ impl Class for ClassFile {
     fn set_handle(&mut self, handle: Handle<VTXObject>) { self.handle = Some(handle); }
 
     fn resolve(&self, constant_pool: Vec<ConstantsPoolInfo>, index: u16) -> Result<String, ()> {
-        if let ConstantsPoolInfo::Utf8 { bytes, .. } = &constant_pool[index as usize - 1] { Ok(bytes.to_string()) } else { Err(()) }
+        if let ConstantsPoolInfo::Utf8 { bytes, .. } = &constant_pool[index as usize] { Ok(bytes.to_string()) } else { Err(()) }
     }
 
     fn resolve_method(&self, method_info: ConstantsPoolInfo, superclass: bool, class_in: Option<Box<&dyn Class>>, running_in: &mut Vastatrix)
@@ -199,10 +199,10 @@ impl Class for ClassFile {
         }
         let method_name: String;
         let method_desc: String;
-        let name_and_type_pool = &self.constant_pool[name_and_type as usize - 1];
+        let name_and_type_pool = &self.constant_pool[name_and_type as usize];
         if let ConstantsPoolInfo::NameAndType { name_index, descriptor_index, } = name_and_type_pool {
-            let name_pool = &self.constant_pool[*name_index as usize - 1];
-            let desc_pool = &self.constant_pool[*descriptor_index as usize - 1];
+            let name_pool = &self.constant_pool[*name_index as usize];
+            let desc_pool = &self.constant_pool[*descriptor_index as usize];
             if let ConstantsPoolInfo::Utf8 { bytes, .. } = name_pool {
                 method_name = bytes.to_string();
             } else {
@@ -220,10 +220,10 @@ impl Class for ClassFile {
         let class = if superclass {
             if class_in.is_some() {
                 let inclass = class_in.unwrap();
-                let superclass_pool = &inclass.get_constant_pool()[inclass.get_super_class() as usize - 1];
+                let superclass_pool = &inclass.get_constant_pool()[inclass.get_super_class() as usize];
                 trace!("superclass pool: {:?}", superclass_pool);
                 if let ConstantsPoolInfo::Class { name_index, } = superclass_pool {
-                    let superclass_name_pool = &inclass.get_constant_pool()[*name_index as usize - 1];
+                    let superclass_name_pool = &inclass.get_constant_pool()[*name_index as usize];
                     if let ConstantsPoolInfo::Utf8 { bytes, .. } = superclass_name_pool {
                         handle = running_in.load_or_get_class_handle(bytes.to_string());
                         trace!("new class: {}", bytes.to_string());
@@ -238,9 +238,9 @@ impl Class for ClassFile {
                 panic!("please set class_in :(");
             }
         } else {
-            let class_pool = &self.constant_pool[class_index as usize - 1];
+            let class_pool = &self.constant_pool[class_index as usize];
             if let ConstantsPoolInfo::Class { name_index, } = &class_pool {
-                let name_pool = &self.constant_pool[*name_index as usize - 1];
+                let name_pool = &self.constant_pool[*name_index as usize];
                 if let ConstantsPoolInfo::Utf8 { bytes, .. } = name_pool {
                     handle = running_in.load_or_get_class_handle(bytes.to_string());
                     running_in.get_class(handle)
@@ -294,8 +294,8 @@ impl Class for ClassFile {
 
     fn create_frame(&self, name: String, desc: String) -> Option<Box<dyn Frame>> {
         for method in &self.methods {
-            let method_name_pool = &self.constant_pool[method.name_index as usize - 1];
-            let method_desc_pool = &self.constant_pool[method.descriptor_index as usize - 1];
+            let method_name_pool = &self.constant_pool[method.name_index as usize];
+            let method_desc_pool = &self.constant_pool[method.descriptor_index as usize];
             let method_name = if let ConstantsPoolInfo::Utf8 { bytes, .. } = method_name_pool {
                 bytes.to_string()
             } else {
@@ -347,9 +347,9 @@ impl Frame for BytecodeFrame {
         loop {
             let op = self.code[self.ip as usize];
             let class = running_in.get_class(self.class_handle);
-            let this_class = &class.get_constant_pool()[class.get_this_class() as usize - 1];
+            let this_class = &class.get_constant_pool()[class.get_this_class() as usize];
             if let ConstantsPoolInfo::Class { name_index, } = this_class {
-                let name = &class.get_constant_pool()[*name_index as usize - 1];
+                let name = &class.get_constant_pool()[*name_index as usize];
                 if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                     debug!("class: {}, method: {}, opcode: 0x{:x}, current stack:{:?}", bytes.to_string(), self.method, op, self.stack);
                 }
@@ -358,164 +358,243 @@ impl Frame for BytecodeFrame {
             match op {
                 0x2 => {
                     // iconst_m1
+                    trace!("INSTRUCTION: iconst_m1");
                     self.stack.push_back(Argument::new(-1, MethodType::Int));
                 },
                 0x3 => {
                     // iconst_0
+                    trace!("INSTRUCTION: iconst_0");
                     self.stack.push_back(Argument::new(0, MethodType::Int));
                 },
                 0x4 => {
                     // iconst_1
+                    trace!("INSTRUCTION: iconst_1");
                     self.stack.push_back(Argument::new(1, MethodType::Int));
                 },
                 0x5 => {
                     // iconst_2
+                    trace!("INSTRUCTION: iconst_2");
                     self.stack.push_back(Argument::new(2, MethodType::Int));
                 },
                 0x6 => {
                     // iconst_3
+                    trace!("INSTRUCTION: iconst_3");
                     self.stack.push_back(Argument::new(3, MethodType::Int));
                 },
                 0x7 => {
+                    // iconst_4
+                    trace!("INSTRUCTION: iconst_4");
                     self.stack.push_back(Argument::new(4, MethodType::Int));
                 },
                 0x8 => {
+                    // iconst_5
+                    trace!("INSTRUCTION: iconst_4");
                     self.stack.push_back(Argument::new(5, MethodType::Int));
                 },
                 0x12 => {
+                    // ldc index
                     let index = self.code[self.ip as usize + 1];
                     let class = running_in.get_class(self.class_handle);
-                    let constant = &class.get_constant_pool()[index as usize - 1];
+                    let constant = &class.get_constant_pool()[index as usize];
+                    trace!("INSTRUCTION: ldc {}", index);
                     match constant {
                         ConstantsPoolInfo::Integer { bytes, } => {
                             self.stack.push_back(Argument::new(*bytes as i32, MethodType::Int));
+                        },
+                        ConstantsPoolInfo::String { string_index } => {
+                        
                         },
                         a => {
                             panic!("BAD! {:?}", a);
                         },
                     }
+                    self.ip += 1;
                 },
                 0x15 => {
+                    // iload index
+                    let index = self.code[self.ip as usize + 1];
+                    trace!("INSTRUCTION: iload {}", index);
+                    self.stack.push_back(self.locals[index as usize].clone());
                     self.ip += 1;
-                    self.stack.push_back(self.locals[self.code[self.ip as usize] as usize].clone());
                 },
                 0x1A => {
                     // iload_0
+                    trace!("INSTRUCTION: iload_0");
                     self.stack.push_back(self.locals[0].clone());
                 },
                 0x1B => {
                     // iload_1
+                    trace!("INSTRUCTION: iload_1");
                     self.stack.push_back(self.locals[1].clone());
                 },
                 0x1C => {
+                    // iload_2
+                    trace!("INSTRUCTION: iload_2");
                     self.stack.push_back(self.locals[2].clone());
                 },
                 0x1D => {
+                    // iload_3
+                    trace!("INSTRUCTION: iload_3");
                     self.stack.push_back(self.locals[3].clone());
                 },
                 0x2A => {
+                    // aload_0
+                    trace!("INSTRUCTION: aload_0");
                     self.stack.push_back(self.locals[0].clone());
                 },
+                0x2C => {
+                    // aload_2
+                    trace!("INSTRUCTION: aload_2");
+                    self.stack.push_back(self.locals[2].clone());
+                },
+                0x2E => {
+                    // iaload [arrayref, index]
+                    let index = self.stack.pop_back().unwrap();
+                    let arrayref = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: iaload [arrayref: {:?}, index: {:?}]", arrayref, index);
+                    self.stack.push_back(running_in.get_array(arrayref.into()).1[Into::<usize>::into(index)].clone());
+                }
                 0x36 => {
-                    // istore     index
-                    let value = self.stack.pop_front().unwrap();
+                    // istore index [value]
+                    let value = self.stack.pop_back().unwrap();
+                    let index = self.code[self.ip as usize + 1];
+                    trace!("INSTRUCTION: istore {}, [value: {:?}]", index, value);
+                    self.locals[index as usize] = value;
                     self.ip += 1;
-                    self.locals[self.code[self.ip as usize] as usize] = value;
                 },
                 0x3B => {
-                    // istore_0
-                    let value = self.stack.pop_front().unwrap();
+                    // istore_0 [value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: istore_0 [value: {:?}]", value);
                     self.locals[0] = value;
                 },
                 0x3C => {
-                    let value = self.stack.pop_front().unwrap();
+                    // istore_1 [value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: istore_1 [value: {:?}]", value);
                     self.locals[1] = value;
                 },
                 0x3D => {
-                    let value = self.stack.pop_front().unwrap();
+                    // istore_2 [value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: istore_2 [value: {:?}]", value);
                     self.locals[2] = value;
                 },
                 0x3E => {
-                    let value = self.stack.pop_front().unwrap();
+                    // istore_3 [value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: istore_3 [value: {:?}]", value);
                     self.locals[3] = value;
                 },
+                0x4D => {
+                    // astore_2 [value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: astore_2 [value: {:?}]", value);
+                    self.locals[2] = value;
+                }
                 0x4B => {
-                    let value = self.stack.pop_front().unwrap();
-                    trace!("LOCALS LENGTH: {}", self.locals.len());
+                    // astore_0 [value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: astore_0 [value: {:?}]", value);
                     self.locals[0] = value;
                 },
+                0x4F => {
+                    // iastore [arrayref, index, value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("a");
+                    let index = Into::<usize>::into(self.stack.pop_back().unwrap());
+                    trace!("b");
+                    let array = Into::<usize>::into(self.stack.pop_back().unwrap());
+                    trace!("c");
+                    trace!("INSTRUCTION: iastore [arrayref: {:?}, index: {:?}, value: {:?}]", array, index, value);
+                    running_in.get_array(array).1[index] = value;
+                },
                 0x57 => {
-                    self.stack.pop_front().unwrap();
+                    // pop [value]
+                    trace!("INSTRUCTION: pop [value: {:?}]", self.stack.pop_back().unwrap());
                 },
                 0x59 => {
+                    // dup [value] -> [value, value]
                     let value = &self.stack[0];
+                    trace!("INSTRUCTION: pop [value: {:?}]", value);
                     self.stack.push_back(value.clone());
                 },
                 0x60 => {
-                    // iadd
-                    let a = self.stack.pop_front().unwrap();
-                    let b = self.stack.pop_front().unwrap();
+                    // iadd [value1, value2] -> [Int]
+                    let a = self.stack.pop_back().unwrap();
+                    let b = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: iadd [value1: {:?}, value2: {:?}]", b, a);
                     self.stack.push_back(b.wrapping_iadd(a));
                 },
                 0x64 => {
-                    // isub
-                    let a = self.stack.pop_front().unwrap();
-                    let b = self.stack.pop_front().unwrap();
+                    // isub [value1, value2] -> [Int]
+                    let a = self.stack.pop_back().unwrap();
+                    let b = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: isub [value1: {:?}, value2: {:?}]", b, a);
                     self.stack.push_back(b.wrapping_isub(a));
                 },
                 0x68 => {
-                    // imul
-                    let a = self.stack.pop_front().unwrap();
-                    let b = self.stack.pop_front().unwrap();
+                    // imul [value1, value2] -> [Int]
+                    let a = self.stack.pop_back().unwrap();
+                    let b = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: imul [value1: {:?}, value2: {:?}]", b, a);
                     self.stack.push_back(b.wrapping_imul(a));
                 },
                 0x6C => {
-                    // idiv
-                    let a = self.stack.pop_front().unwrap();
-                    let b = self.stack.pop_front().unwrap();
+                    // idiv [value1, value2] -> [Int]
+                    let a = self.stack.pop_back().unwrap();
+                    let b = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: idiv [value1: {:?}, value2: {:?}]", b, a);
                     self.stack.push_back(b.wrapping_idiv(a));
                 },
                 0x84 => {
+                    // iinc index const
                     let index = self.code[(self.ip + 1) as usize];
                     let cons_t = self.code[(self.ip + 2) as usize];
+                    trace!("INSTRUCTION: iinc {} {}", index, cons_t);
                     self.locals[index as usize] += cons_t as i32;
                     self.ip += 2;
                 },
                 0xA7 => {
+                    //goto branchbyte1, branchbyte2;
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
-                    trace!("{}", branchbyte1);
                     let branchbyte2 = self.code[(self.ip + 2) as usize];
-                    trace!("{}", branchbyte2);
-                    self.ip = self.ip.checked_add_signed((((((branchbyte1 as u16) << 8) | branchbyte2 as u16) - 1) as i16).into()).unwrap();
-                    trace!("{:?}", self.code);
+                    trace!("INSTRUCTION: goto {} {}", branchbyte1, branchbyte2);
+                    self.ip = self.ip.checked_add_signed((((((branchbyte1 as u16) << 8) | branchbyte2 as u16)) as i16).into()).unwrap() - 1;
+                    // we subtract 1 because we add 1 at the end of the function
                 },
                 0xAC => {
-                    // ireturn
-                    let v = self.stack.pop_front().unwrap();
+                    // ireturn [value]
+                    let v = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: ireturn [value: {:?}]", v);
                     return v;
                 },
                 0xA2 => {
-                    // if_icmpge    brancbyte1      branchbyte2
-                    let value1 = self.stack.pop_front().unwrap();
-                    let value2 = self.stack.pop_front().unwrap();
+                    // if_icmpge branchbyte1 branchbyte2 [value1, value2]
+                    let value2 = self.stack.pop_back().unwrap();
+                    let value1 = self.stack.pop_back().unwrap(); 
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
                     let branchbyte2 = self.code[(self.ip + 2) as usize];
-                    if value1 >= value2 {
+                    trace!("INSTRUCTION: if_icmpge {} {} [value1: {:?}, value2: {:?}]", branchbyte1, branchbyte2, value1, value2);
+                    if value1 >= value2 { 
                         self.ip += (((branchbyte1 as u32) << 8) | branchbyte2 as u32) - 1;
-                    } else {
+                    } else { 
                         self.ip += 2;
                     }
                 },
                 0xB1 => {
+                    // return
                     return Argument::new(0, MethodType::Void);
                 },
                 0xB4 => {
+                    // getfield indexbyte1 indexbyte2 [objectref] -> [value]
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    let mut objectref = self.stack.pop_front().unwrap();
+                    let mut objectref = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: getfield {} {} [objectref: {:?}]", indexbyte1, indexbyte2, objectref);
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let instance = running_in.get_instance(objectref.value_ref() as usize);
-                    let field_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    let field_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize)];
                     if let ConstantsPoolInfo::FieldRef { name_and_type_index, ..} = field_info {
                         //let class = &this_class.get_constant_pool()[*class_index as usize - 1];
                         /*if let ConstantsPoolInfo::Class { name_index } = class {
@@ -525,9 +604,9 @@ impl Frame for BytecodeFrame {
                                 let that_class = running_in.get_class(class_handle); // don't know if i need this right now.
                             }
                         }*/
-                        let name_and_type = &this_class.get_constant_pool()[*name_and_type_index as usize - 1];
+                        let name_and_type = &this_class.get_constant_pool()[*name_and_type_index as usize];
                         if let ConstantsPoolInfo::NameAndType { name_index, .. } = name_and_type {
-                            let name = &this_class.get_constant_pool()[*name_index as usize - 1];
+                            let name = &this_class.get_constant_pool()[*name_index as usize];
                             if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                                 self.stack.push_back(instance.fields.get(&bytes.to_string()).expect("a").clone());
                             }
@@ -536,13 +615,15 @@ impl Frame for BytecodeFrame {
                     self.ip += 2;
                 },
                 0xB5 => {
+                    // putfield indexbyte1 indexbyte2 [objectref, value]
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    let mut objectref = self.stack.pop_front().unwrap();
-                    let value = self.stack.pop_front().unwrap();
+                    let value = self.stack.pop_back().unwrap();
+                    let mut objectref = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: putfield {} {} [objectref: {:?}, value: {:?}]", indexbyte1, indexbyte2, objectref, value);
                     let this_class = running_in.get_class(self.class_handle).clone();
-                    let instance = running_in.get_instance(objectref.value_ref() as usize);
-                    let field_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    let instance = running_in.get_instance(objectref.into());
+                    let field_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize)];
                     if let ConstantsPoolInfo::FieldRef { name_and_type_index, .. } = field_info {
                         //let class = &this_class.get_constant_pool()[*class_index as usize - 1];
                         /*if let ConstantsPoolInfo::Class { name_index } = class {
@@ -552,9 +633,9 @@ impl Frame for BytecodeFrame {
                                 let that_class = running_in.get_class(class_handle); // don't know if i need this right now.
                             }
                         }*/
-                        let name_and_type = &this_class.get_constant_pool()[*name_and_type_index as usize - 1];
+                        let name_and_type = &this_class.get_constant_pool()[*name_and_type_index as usize];
                         if let ConstantsPoolInfo::NameAndType { name_index, .. } = name_and_type {
-                            let name = &this_class.get_constant_pool()[*name_index as usize - 1];
+                            let name = &this_class.get_constant_pool()[*name_index as usize];
                             if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                                 instance.fields.insert(bytes.to_string(), value);
                             }
@@ -563,17 +644,21 @@ impl Frame for BytecodeFrame {
                     self.ip += 2;
                 },
                 0xB6 => {
+                    // invokevirtual indexbyte1 indexbyte2 [objectref, aargs]
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
                     let this_class = running_in.get_class(self.class_handle).clone();
-                    let objectref = self.stack.pop_front().unwrap();
-                    let method_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    let method_info = &this_class.get_constant_pool()[((indexbyte1 as usize) << 8) | indexbyte2 as usize];
                     if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
-                        let mut args: Vec<Argument> = vec![objectref];
+                        let mut meep: Vec<Argument> = vec![];
                         for _ in desc.types {
-                            args.push(self.stack.pop_front().unwrap());
+                            meep.push(self.stack.pop_back().unwrap());
                         }
+                        let objectref = self.stack.pop_back().unwrap();
+                        trace!("INSTRUCTION: invokevirtual {} {} [objectref: {:?}, aargs: {:?}]", indexbyte1, indexbyte2, objectref, meep);
+                        let mut args = vec![objectref];
+                        args.append(&mut meep);
                         let back = method.exec(args, running_in);
                         if !back.void() {
                             self.stack.push_back(back);
@@ -583,18 +668,22 @@ impl Frame for BytecodeFrame {
                     self.ip += 2;
                 },
                 0xB7 => {
+                    // invokespecial indexbyte1 indexbyte2 [objectref, aargs]
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    let this_class = running_in.get_class(self.class_handle).clone();
-                    let objectref = self.stack.pop_front().unwrap();
-                    let method_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    let this_class = running_in.get_class(self.class_handle).clone(); 
+                    let method_info = &this_class.get_constant_pool()[((indexbyte1 as usize) << 8) | indexbyte2 as usize];
                     if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
-                        let mut args: Vec<Argument> = vec![objectref];
+                        let mut meep: Vec<Argument> = vec![];
                         for _ in desc.types {
-                            args.push(self.stack.pop_front().unwrap());
+                            meep.push(self.stack.pop_back().unwrap());
                         }
-                        let back = method.exec(args, running_in);
+                        let objectref = self.stack.pop_back().unwrap();
+                        trace!("INSTRUCTION: invokevirtual {} {} [objectref: {:?}, aargs: {:?}]", indexbyte1, indexbyte2, objectref, meep);
+                        let mut args = vec![objectref];
+                        args.append(&mut meep);
+                        let back = method.exec(args, running_in); 
                         if !back.void() {
                             self.stack.push_back(back);
                         }
@@ -602,17 +691,20 @@ impl Frame for BytecodeFrame {
                     self.ip += 2;
                 },
                 0xB8 => {
+                    // invokestatic indexbyte1 indexbyte2 [aargs]
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    trace!("byte1: {}, byte2: {}, final: {}", indexbyte1, indexbyte2, (((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1);
+                    trace!("byte1: {}, byte2: {}, final: {}", indexbyte1, indexbyte2, ((indexbyte1 as usize) << 8) | indexbyte2 as usize);
                     let this_class = running_in.get_class(self.class_handle).clone();
-                    let method_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
+                    let method_info = &this_class.get_constant_pool()[((indexbyte1 as usize) << 8) | indexbyte2 as usize]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
+                    //update: found out why. entry 0 is a "dummy reference". will change to reflect this.
                     if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
                         let mut args: Vec<Argument> = vec![];
                         for _ in desc.types {
-                            args.push(self.stack.pop_front().unwrap());
+                            args.push(self.stack.pop_back().unwrap());
                         }
+                        trace!("INSTRUCTION: invokestatic {} {} [aargs: {:?}]", indexbyte1, indexbyte2, args);
                         let back = method.exec(args, running_in);
                         if !back.void() {
                             self.stack.push_back(back);
@@ -623,12 +715,14 @@ impl Frame for BytecodeFrame {
                     self.ip += 2;
                 },
                 0xBB => {
+                    // new indexbyte1 indexbyte2 -> [ClassReference]
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    trace!("INSTRUCTION: new {} {}", indexbyte1, indexbyte2);
                     let this_class = running_in.get_class(self.class_handle).clone();
-                    let class_info = &this_class.get_constant_pool()[(((indexbyte1 as usize) << 8) | indexbyte2 as usize) - 1];
+                    let class_info = &this_class.get_constant_pool()[((indexbyte1 as usize) << 8) | indexbyte2 as usize];
                     if let ConstantsPoolInfo::Class { name_index, } = class_info {
-                        let name = &this_class.get_constant_pool()[*name_index as usize - 1];
+                        let name = &this_class.get_constant_pool()[*name_index as usize];
                         if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                             let handle = running_in.load_or_get_class_handle(bytes.to_string());
                             let mut class = running_in.get_class(handle).clone();
@@ -638,6 +732,35 @@ impl Frame for BytecodeFrame {
                     }
                     self.ip += 2;
                 },
+                0xBC => {
+                   // newarray atype [count] -> [ArrayReference]
+                   let count = self.stack.pop_back().unwrap();
+                   let array = vec![Argument::new(0 as i32, MethodType::Int); Into::<i32>::into(count.clone()) as usize]; 
+                   let atype = self.code[(self.ip + 1) as usize];
+                   trace!("INSTRUCTION: newarray {} [count: {:?}]", atype, count);
+                   let of: MethodType = match atype {
+                       4 => MethodType::Boolean,
+                       5 => MethodType::Char,
+                       6 => MethodType::Float,
+                       7 => MethodType::Double,
+                       8 => MethodType::Byte,
+                       9 => MethodType::Short,
+                       10 => MethodType::Int,
+                       11 => MethodType::Long,
+                       _ => {
+                           panic!("Array type not recognized!");
+                       }
+                   };
+                   let reference = running_in.create_array(array, of);
+                   self.stack.push_back(Argument::new(reference, MethodType::ArrayReference));
+                   self.ip += 1;
+                },
+                0xBE => {
+                    // arraylength [arrayref] -> [Int]
+                    let arrayref = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION arraylength [arrayref: {:?}]", arrayref); 
+                    self.stack.push_back(Argument::new(running_in.get_array(arrayref.into()).1.len() as u32, MethodType::Int));
+                }
                 _ => {
                     panic!("Unimplemented opcode: 0x{:x}", op);
                 },

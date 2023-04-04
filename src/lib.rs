@@ -3,3 +3,4 @@ extern crate log;
 
 pub mod class;
 pub mod vastatrix;
+pub mod loading;

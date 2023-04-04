@@ -8,14 +8,5 @@ class!(
         static "<init>", "()V" {
             Argument::new(0, MethodType::Void)
         }
-
-        static "MeepMorp", "(II)I" {
-            Argument::new(0, MethodType::Void)
-        }
-
-        static "MeepMorp", "(I)I" {
-            Argument::new(0, MethodType::Void)
-        }
-
     }
 );

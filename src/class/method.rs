@@ -25,6 +25,7 @@ pub enum MethodType {
     ClassReference { classpath: String, },
     Short,
     Boolean,
+    ArrayReference,
 }
 
 impl Trace<VTXObject> for MethodType {
@@ -166,18 +167,22 @@ impl PartialEq<Descriptor> for Descriptor {
 
 pub trait Num: DynClone + Debug {
     fn as_any(&self) -> &dyn Any;
+    fn as_usize(&self) -> usize;
 }
 
 clone_trait_object!(Num);
 
 impl Num for u32 {
     fn as_any(&self) -> &dyn Any { self }
+    fn as_usize(&self) -> usize { *self as usize}
 }
 impl Num for i32 {
     fn as_any(&self) -> &dyn Any { self }
+    fn as_usize(&self) -> usize { *self as usize}
 }
 impl Num for f32 {
     fn as_any(&self) -> &dyn Any { self }
+    fn as_usize(&self) -> usize { *self as usize}
 }
 
 #[derive(Debug, Clone)]
@@ -191,6 +196,8 @@ impl Argument {
 
     pub fn value_ref(&mut self) -> u32 {
         if let MethodType::ClassReference { .. } = self.is {
+            return *self.value.as_any().downcast_ref::<u32>().unwrap();
+        } else if let MethodType::ArrayReference = self.is {
             return *self.value.as_any().downcast_ref::<u32>().unwrap();
         }
         panic!("value was not a ref! was a {:?}", self.is);
@@ -259,13 +266,13 @@ impl PartialOrd<Argument> for Argument {
         }
         match self.is {
             MethodType::Int => {
-                let s = self.value.as_any().downcast_ref::<i32>().unwrap();
-                let o = self.value.as_any().downcast_ref::<i32>().unwrap();
-                return s.partial_cmp(o);
+                let s = self.value.as_usize();
+                let o = other.value.as_usize();
+                return s.partial_cmp(&o);
             },
             MethodType::Float => {
                 let s = self.value.as_any().downcast_ref::<f32>().unwrap();
-                let o = self.value.as_any().downcast_ref::<f32>().unwrap();
+                let o = other.value.as_any().downcast_ref::<f32>().unwrap();
                 return s.partial_cmp(o);
             },
             _ => panic!("cannot compare these types!"),
@@ -288,5 +295,23 @@ impl AddAssign<i32> for Argument {
         }
         let total = self.value.as_any().downcast_ref::<i32>().unwrap() + rhs;
         self.value = Box::new(total as i32);
+    }
+}
+
+impl Into<i32> for Argument {
+    fn into(self) -> i32 {
+        return *self.value.as_any().downcast_ref::<i32>().unwrap();
+    }
+}
+
+impl Into<usize> for Argument {
+    fn into(self) -> usize {
+        return self.value.as_usize();
+    }
+}
+
+impl Trace<VTXObject> for Argument {
+    fn trace(&self, tracer: &mut Tracer<VTXObject>) {
+        return;
     }
 }

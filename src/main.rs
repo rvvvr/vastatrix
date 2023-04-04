@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use fern::colors::{Color, ColoredLevelConfig};
-use vastatrix::vastatrix::Vastatrix;
+use vastatrix::{vastatrix::Vastatrix, loading};
 use zip::ZipArchive;
 
 #[derive(Parser)]
@@ -17,7 +17,7 @@ fn main() {
     let file = File::open(cli.jar.as_deref().unwrap()).unwrap();
     logging_setup();
     let archive = ZipArchive::new(file).unwrap();
-    let mut vtx = Vastatrix::new(archive);
+    let mut vtx = Vastatrix::new(archive); 
     vtx.run();
 }
 

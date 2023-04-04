@@ -6,20 +6,22 @@ use std::io::Read;
 use broom::trace::Trace;
 use broom::Handle;
 use bytes::Bytes;
+use libloading::Library;
 use zip::ZipArchive;
 
 use crate::class::attribute::Attribute;
-use crate::class::classfile::ClassFile;
-use crate::class::frame::{BytecodeFrame, Frame};
+use crate::class::classfile::{ClassFile, BytecodeFrame};
+use crate::class::frame::Frame;
 use crate::class::instance::Instance;
 use crate::class::method::{Argument, MethodType};
 use crate::class::{Class, ConstantsPoolInfo};
+use crate::loading;
 
 #[derive(Debug)]
 pub enum VTXObject {
     Class(Box<dyn Class>),
     Instance(Instance),
-    Array(Vec<MethodType>),
+    Array((MethodType, Vec<Argument>)),
 }
 
 impl Trace<Self> for VTXObject {
@@ -27,7 +29,8 @@ impl Trace<Self> for VTXObject {
         match self {
             VTXObject::Class(_) => {},
             VTXObject::Instance(_) => {},
-            VTXObject::Array(elements) => elements.trace(tracer),
+            VTXObject::Array(elements) => elements.1.trace(tracer),
+
         }
     }
 }
@@ -37,16 +40,27 @@ pub struct Vastatrix {
     class_handles:    HashMap<String, Handle<VTXObject>>,
     instance_handles: Vec<Handle<VTXObject>>,
     archive:          ZipArchive<File>,
+    std:              Library,
 }
 
 impl Vastatrix {
     pub fn new(archive: ZipArchive<File>) -> Self {
-        Self { heap: broom::Heap::default(), class_handles: HashMap::new(), instance_handles: vec![], archive }
+        let mut heap = broom::Heap::default();
+        let lib = unsafe {
+           Library::new("./vtx-std/target/debug/libvtx_std.so").unwrap()
+        };
+        let mut class_handles = HashMap::new(); 
+        Self { heap, class_handles, instance_handles: vec![], archive, std: lib}
     }
 
     pub fn run(&mut self) { self.load(); }
 
     fn load(&mut self) {
+        let std = loading::load_classes_from_std(&self.std);
+        for classpath in std.keys() {
+            let handle = self.heap.insert_temp(VTXObject::Class(std.get(classpath).unwrap().to_owned()));
+            self.class_handles.insert(classpath.to_string(), handle);
+        }
         let archive = &mut self.archive;
         let mut manifest_file = archive.by_name("META-INF/MANIFEST.MF").expect("Jar has no manifest!");
         let mut manifest = String::new();
@@ -64,8 +78,8 @@ impl Vastatrix {
                 let maindesc = "([Ljava/lang/String;)V".to_string();
                 let mut method_info = None;
                 for method in &class.get_methods() {
-                    let name_pool = &class.get_constant_pool()[method.name_index as usize - 1];
-                    let desc_pool = &class.get_constant_pool()[method.descriptor_index as usize - 1];
+                    let name_pool = &class.get_constant_pool()[method.name_index as usize];
+                    let desc_pool = &class.get_constant_pool()[method.descriptor_index as usize];
                     let name: String;
                     let desc: String;
                     if let ConstantsPoolInfo::Utf8 { bytes, .. } = name_pool {
@@ -131,13 +145,13 @@ impl Vastatrix {
     pub fn prepare_instance(&mut self, class: &mut Box<dyn Class>) -> u32 {
         let mut instance = Instance::new();
         for field in &class.get_fields() {
-            let name = &class.get_constant_pool()[field.name_index as usize - 1];
+            let name = &class.get_constant_pool()[field.name_index as usize];
             if let ConstantsPoolInfo::Utf8 { bytes, .. } = name {
                 trace!("field name: {}", bytes);
                 if field.access_flags & 0x0008 != 0 {
                     for attribute in &field.attribute_info {
                         if let Attribute::ConstantValue { constantvalue_index, .. } = attribute {
-                            let constantvalue = &class.get_constant_pool()[*constantvalue_index as usize - 1];
+                            let constantvalue = &class.get_constant_pool()[*constantvalue_index as usize];
                             match constantvalue {
                                 _ => panic!("constantvalue_index did not index a valid constant value!"),
                             }
@@ -159,5 +173,21 @@ impl Vastatrix {
             return instance;
         }
         panic!("couldn't get instance!");
+    }
+
+    pub fn create_array(&mut self, array: Vec<Argument>, of: MethodType) -> u32 {
+        let handle = self.heap.insert_temp(VTXObject::Array((of, array)));
+        self.instance_handles.push(handle);
+        return self.instance_handles.len() as u32 - 1;
+    }
+
+    pub fn get_array(&mut self, index: usize) -> &mut (MethodType, Vec<Argument>) {
+        println!("{}, {:?}", index, self.instance_handles);
+        let handle = self.instance_handles.get(index).unwrap();
+          if let VTXObject::Array(elements) = self.heap.get_mut(handle).unwrap() {
+              return elements;
+          } else {
+              panic!("not an array!");
+          }
     }
 }

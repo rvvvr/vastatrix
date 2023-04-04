@@ -1,14 +1,11 @@
-use std::collections::VecDeque;
 use std::fmt::Debug;
 
 use broom::Handle;
-use bytes::{Buf, Bytes};
 use dyn_clone::{clone_trait_object, DynClone};
 
-use super::frame::{BytecodeFrame, Frame};
+use super::frame::{Frame};
 use super::method::Descriptor;
-use crate::class::attribute::{Attribute, AttributeCommon};
-use crate::class::method::{Argument, MethodType};
+use crate::class::attribute::{Attribute};
 use crate::vastatrix::{VTXObject, Vastatrix};
 
 pub trait Class: DynClone + Debug {
@@ -58,6 +55,7 @@ pub enum ConstantsPoolInfo {
     InvokeDynamic { bootstrap_method_attr_index: u16, name_and_type_index: u16, } = 18,
     Module { name_index: u16, } = 19,
     Package { name_index: u16, } = 20,
+    Dummy = 21,
 }
 
 #[derive(Debug, Clone)]
