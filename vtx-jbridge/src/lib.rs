@@ -8,12 +8,14 @@ use syn::ext::IdentExt;
 use syn::parse::Parse;
 use syn::{braced, parse_macro_input, Block, Ident, LitStr, Token};
 use vastatrix::class::method::Descriptor;
+use vastatrix::class::method::MethodType;
 
 #[derive(Debug)]
 pub(crate) struct ClassData {
     pub classpath: String,
     pub classname: String,
     pub methods:   ClassMethods,
+    pub fields:    ClassFields,
 }
 
 #[derive(Debug)]
@@ -28,16 +30,30 @@ pub(crate) struct MethodData {
     pub instance: bool,
 }
 
+#[derive(Debug)]
+pub(crate) struct ClassFields {
+    pub fields: HashMap<String, Vec<FieldData>>,
+}
+
+#[derive(Debug)]
+pub(crate) struct FieldData {
+    pub javadesc: String,
+    pub instance: bool,
+}
+
 pub(crate) mod keywords {
     syn::custom_keyword!(package);
     syn::custom_keyword!(public);
     syn::custom_keyword!(class);
+    syn::custom_keyword!(field);
+    syn::custom_keyword!(instance);
 }
 
 impl Parse for ClassData {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut classpath = String::new();
         let mut methods = ClassMethods { methods: HashMap::new(), };
+        let mut fields = ClassFields { fields: HashMap::new(), };
         let mut classname = String::new();
         println!("{}", input);
         if input.peek(keywords::package) {
@@ -78,9 +94,35 @@ impl Parse for ClassData {
             let class_content;
             braced!(class_content in input);
 
-            // fields go here - not impl yet
-
-            
+            // fields go here
+            loop {
+                println!("Meep");
+                if class_content.peek(keywords::field) {
+                    println!("Meep2");
+                    class_content.parse::<keywords::field>()?;
+                    if class_content.peek(keywords::instance) {
+                        println!("Meep3");
+                        class_content.parse::<keywords::instance>()?;
+                        if class_content.peek(LitStr) {
+                            println!("Meep4");
+                            let namelit = class_content.parse::<LitStr>()?;
+                            class_content.parse::<Token![,]>()?;
+                            println!("Meep5");
+                            let desclit = class_content.parse::<LitStr>()?;
+                            println!("wtf?? {}", input);
+                            class_content.parse::<Token![;]>()?;
+                            println!("Meep6");
+                            if fields.fields.contains_key(&namelit.value()) {
+                                fields.fields.get_mut(&namelit.value()).expect("could not get field!").push(FieldData { javadesc: desclit.value(), instance: false, });
+                            } else {
+                                fields.fields.insert(namelit.value(), vec![FieldData { javadesc: desclit.value(), instance: false, }]);
+                            }
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
 
             loop {
                 // parsing methods -- only public methods are supported atm (also unsure if this
@@ -95,11 +137,12 @@ impl Parse for ClassData {
                         if methods.methods.contains_key(&namelit.value()) {
                             methods.methods
                                    .get_mut(&namelit.value())
-                                   .unwrap()
+                                   .expect("could not get method!")
                                    .push(MethodData { javadesc: desclit.value(), logic: tokens.to_token_stream().into(), instance: false, });
                         } else {
-                            methods.methods
-                                   .insert(namelit.value(), vec![MethodData { javadesc: desclit.value(), logic: tokens.to_token_stream().into(), instance: false, }]);
+                            methods.methods.insert(namelit.value(), vec![MethodData { javadesc: desclit.value(),
+                                                                                      logic:    tokens.to_token_stream().into(),
+                                                                                      instance: false, }]);
                         }
                     }
                 } else {
@@ -110,7 +153,7 @@ impl Parse for ClassData {
             return Err(input.error("Class macro must start with package statement!"));
         }
         println!("{}", classpath);
-        Ok(ClassData { classpath, classname, methods })
+        Ok(ClassData { classpath, classname, methods, fields })
     }
 }
 
@@ -130,9 +173,9 @@ pub fn class(input: TokenStream) -> TokenStream {
     // out.push_str(format!("impl Class for {} {{\n", thing.classname.as_str()).as_str());
     // println!("SHMEEP {}", out);
 
-    //there in fact is a better way to do this!
+    // there in fact is a better way to do this!
     let mut constants_pool = quote! {ConstantsPoolInfo::Dummy};
-    let mut constants_pool_count = 0u16;
+    let mut constants_pool_count = 1u16;
     let this_class_index: u16;
     // generate this_class constants_pool members
     {
@@ -177,47 +220,93 @@ pub fn class(input: TokenStream) -> TokenStream {
             constants_pool_count += 2;
         }
     }
+    // generate field_info structures and constants_pool members
+    let mut field_count = 0u16;
+    let mut fields = quote! {};
+    println!("FIELDS: {:?}", thing.fields.fields);
+    {
+        for fieldname in thing.fields.fields.keys() {
+            let name_index = constants_pool_count;
+            let name_length = fieldname.len() as u16;
+            constants_pool.append_all(vec![quote! {
+                              , ConstantsPoolInfo::Utf8 {
+                                  length: #name_length,
+                                  bytes: #fieldname.to_string(),
+                              }
+                          }]);
+            constants_pool_count += 1;
+            for field in thing.fields.fields.get(fieldname).expect("could not get field for generating!") {
+                let desc_index = constants_pool_count;
+                let desc = &field.javadesc;
+                let desc_length = desc.len() as u16;
+                constants_pool.append_all(vec![quote!{
+                    , ConstantsPoolInfo::Utf8 {
+                        length: #desc_length,
+                        bytes: #desc.to_string(),
+                    }
+                }]);
+                fields.append_all(vec![quote! {
+                          FieldInfo {
+                              access_flags:     0,
+                              name_index:       #name_index,
+                              descriptor_index: #desc_index,
+                              attribute_count:  0,
+                              attribute_info:   vec![],
+                          },
+
+                      }]);
+                constants_pool_count += 1;
+                field_count += 1;
+            }
+        }
+    }
+
     // generate method_info structures and constants_pool members
     let mut method_count = 0u16;
     let mut methods = quote! {};
-    let mut big_match_arms = quote!{};
-    let mut method_frames = quote!{};
+    let mut big_match_arms = quote! {};
+    let mut method_frames = quote! {};
     {
         for methodname in thing.methods.methods.keys() {
             let mut rust_friendly_methodname = rustify(methodname.to_string());
             let name_index = constants_pool_count;
             let name_length = methodname.len() as u16;
-            constants_pool.append_all(vec![
-                                      quote! {
-                                          , ConstantsPoolInfo::Utf8 {
-                                              length: #name_length,
-                                              bytes: #methodname.to_string(),
-                                          }
-                                      }
-            ]); 
+            constants_pool.append_all(vec![quote! {
+                              , ConstantsPoolInfo::Utf8 {
+                                  length: #name_length,
+                                  bytes: #methodname.to_string(),
+                              }
+                          }]);
             constants_pool_count += 1;
-            let mut little_match_arms = quote!{};
-            for method in thing.methods.methods.get(methodname).unwrap() {
+            let mut little_match_arms = quote! {};
+            for method in thing.methods.methods.get(methodname).expect("could not get method for generating!") {
                 let logic = method.logic.clone();
                 let desc_index = constants_pool_count;
                 let desc = &method.javadesc;
                 let descriptor = Descriptor::new(desc.to_string());
                 let mut rfname = rust_friendly_methodname.clone();
                 for t in descriptor.types {
-                   rfname.push_str(format!("{:?}", t).as_str()); 
+                    if t == MethodType::ArrayReference {
+                       rfname.push_str("Array");
+                       continue;
+                    }
+                    if let MethodType::ClassReference { ref classpath } = t {
+                        rfname.push_str(classpath.replace("/", "").as_str());
+                        continue;
+                    }
+                    rfname.push_str(format!("{:?}", t).as_str());
                 }
-                rfname.push_str(format!("Ret{:?}", descriptor.returns.unwrap()).as_str());
+                rfname.push_str(format!("Ret{:?}", descriptor.returns.expect("could not get descriptor returns!")).as_str());
                 rfname.push_str("Frame");
-                let rf_ident = Ident::new(rfname.as_str(), Span::call_site().into()); 
-                 
+                let rf_ident = Ident::new(rfname.as_str(), Span::call_site().into());
+
                 let desc_length = desc.len() as u16;
-                constants_pool.append_all(vec![
-                                               quote! {
-                                                   , ConstantsPoolInfo::Utf8 {
-                                                       length: #desc_length,
-                                                       bytes: #desc.to_string(),
-                                                   }
-                                               }]);
+                constants_pool.append_all(vec![quote! {
+                                  , ConstantsPoolInfo::Utf8 {
+                                      length: #desc_length,
+                                      bytes: #desc.to_string(),
+                                  }
+                              }]);
                 methods.append_all(vec![quote! {
                           MethodInfo {
                               access_flags: 0u16,
@@ -228,47 +317,43 @@ pub fn class(input: TokenStream) -> TokenStream {
                           },
                        }]);
 
-                
                 constants_pool_count += 1;
                 method_count += 1;
-                little_match_arms.append_all(vec![
-                                                quote! {
-                                                    #desc => {
-                                                        return Some(Box::new(#rf_ident::new()));
-                                                    },
-                                                }]);
-                method_frames.append_all(vec![
-                                            quote! {
-                                                #[derive(Debug)]
-                                                pub struct #rf_ident {
+                little_match_arms.append_all(vec![quote! {
+                                     #desc => {
+                                         return Some(Box::new(#rf_ident::new()));
+                                     },
+                                 }]);
+                method_frames.append_all(vec![quote! {
+                                 #[derive(Debug)]
+                                 pub struct #rf_ident {
 
-                                                }
+                                 }
 
-                                                impl #rf_ident {
-                                                    pub fn new() -> Self {
-                                                        return Self {};
-                                                    }
-                                                }
+                                 impl #rf_ident {
+                                     pub fn new() -> Self {
+                                         return Self {};
+                                     }
+                                 }
 
-                                                impl Frame for #rf_ident {
-                                                    fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument {
-                                                        #logic
-                                                    }
-                                                }
-                                            }]);
+                                 impl Frame for #rf_ident {
+                                     fn exec(&mut self, args: Vec<Argument>, running_in: &mut Vastatrix) -> Argument {
+                                         #logic
+                                     }
+                                 }
+                             }]);
                 println!("d");
             }
-            big_match_arms.append_all(vec![
-                                        quote! {
-                                            #methodname => {
-                                                match desc.as_str() {
-                                                    #little_match_arms
-                                                    _ => {
-                                                        panic!("method {} was found, but not with descriptor {}!", name, desc);
-                                                    }
-                                                }
-                                            }
-                                        }]);
+            big_match_arms.append_all(vec![quote! {
+                              #methodname => {
+                                  match desc.as_str() {
+                                      #little_match_arms
+                                      _ => {
+                                          panic!("method {} was found, but not with descriptor {}!", name, desc);
+                                      }
+                                  }
+                              }
+                          }]);
             println!("e");
         }
     }
@@ -294,7 +379,7 @@ pub fn class(input: TokenStream) -> TokenStream {
                 self.handle = Some(handle);
             }
             fn get_handle(&self) -> Handle<VTXObject> {
-                self.handle.unwrap()
+                self.handle.expect("handle not defined!")
             }
             fn get_magic(&self) -> u32 {
                 0xCAFEBABEu32
@@ -328,10 +413,10 @@ pub fn class(input: TokenStream) -> TokenStream {
                 vec![]
             }
             fn get_field_count(&self) -> u16 {
-                0u16
+                #field_count
             }
             fn get_fields(&self) -> Vec<FieldInfo> {
-                vec![]
+                vec![#fields]
             }
             fn get_method_count(&self) -> u16 {
                 #method_count

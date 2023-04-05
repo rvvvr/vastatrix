@@ -39,9 +39,22 @@ impl Trace<VTXObject> for MethodType {
 impl Descriptor {
     pub fn new(desc: String) -> Self {
         let mut inarg = false;
+        let mut inclass = false;
         let mut types = vec![];
         let mut returns = None;
         for cha in desc.chars() {
+                    if cha == ';' {
+                        inclass = false;
+                        continue;
+                    }
+                    if inclass {
+                        let length = types.len();
+                        if let MethodType::ClassReference { ref mut classpath } = types.get_mut(length - 1).unwrap() {
+                            classpath.push(cha);
+                        }
+                        continue;
+                    }
+            
             // will probably convert this to something to do with nom
             match cha {
                 '(' => {
@@ -52,7 +65,8 @@ impl Descriptor {
                 },
                 'L' =>
                     if inarg {
-                        types.push(MethodType::ClassReference { classpath: "".to_string(), })
+                        types.push(MethodType::ClassReference { classpath: "".to_string(), });
+                        inclass = true;
                     },
                 'I' =>
                     if inarg {
@@ -146,15 +160,16 @@ impl Descriptor {
                     },
                 '[' =>
                     if inarg {
-                        types.push(MethodType::ClassReference { classpath: "java/lang/Array".to_string(), })
+                        types.push(MethodType::ArrayReference)
                     } else {
                         if let None = returns {
-                            returns = Some(MethodType::ClassReference { classpath: "java/lang/Array".to_string(), });
+                            returns = Some(MethodType::ArrayReference);
                         } else {
                             panic!("can only return one type!");
                         }
                     },
-                _ => {},
+                _ => {
+                },
             }
         }
         Self { types, returns }
@@ -174,15 +189,18 @@ clone_trait_object!(Num);
 
 impl Num for u32 {
     fn as_any(&self) -> &dyn Any { self }
-    fn as_usize(&self) -> usize { *self as usize}
+
+    fn as_usize(&self) -> usize { *self as usize }
 }
 impl Num for i32 {
     fn as_any(&self) -> &dyn Any { self }
-    fn as_usize(&self) -> usize { *self as usize}
+
+    fn as_usize(&self) -> usize { *self as usize }
 }
 impl Num for f32 {
     fn as_any(&self) -> &dyn Any { self }
-    fn as_usize(&self) -> usize { *self as usize}
+
+    fn as_usize(&self) -> usize { *self as usize }
 }
 
 #[derive(Debug, Clone)]
@@ -201,6 +219,10 @@ impl Argument {
             return *self.value.as_any().downcast_ref::<u32>().unwrap();
         }
         panic!("value was not a ref! was a {:?}", self.is);
+    }
+
+    pub fn is(&self, other: MethodType) -> bool {
+        self.is == other
     }
 
     pub fn void(&self) -> bool { return self.is == MethodType::Void }
@@ -299,19 +321,13 @@ impl AddAssign<i32> for Argument {
 }
 
 impl Into<i32> for Argument {
-    fn into(self) -> i32 {
-        return *self.value.as_any().downcast_ref::<i32>().unwrap();
-    }
+    fn into(self) -> i32 { return *self.value.as_any().downcast_ref::<i32>().unwrap(); }
 }
 
 impl Into<usize> for Argument {
-    fn into(self) -> usize {
-        return self.value.as_usize();
-    }
+    fn into(self) -> usize { return self.value.as_usize(); }
 }
 
 impl Trace<VTXObject> for Argument {
-    fn trace(&self, tracer: &mut Tracer<VTXObject>) {
-        return;
-    }
+    fn trace(&self, tracer: &mut Tracer<VTXObject>) { return; }
 }

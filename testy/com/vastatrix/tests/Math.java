@@ -35,7 +35,7 @@ public class Math extends MoreMath {
 	}
 
 	public static int instantiate() {
-		Test test = new Test();
+		Test test = new Test(5);
 		return test.zero();
 	}
 
@@ -44,6 +44,10 @@ public class Math extends MoreMath {
 
 		public Test() {
 			zero = 0;
+		}
+
+		public Test(int zero) { //seeing how parameterized constructors change
+			this.zero = zero;
 		}
 
 		public int zero() {

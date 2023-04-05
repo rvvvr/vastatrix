@@ -10,7 +10,7 @@ use libloading::Library;
 use zip::ZipArchive;
 
 use crate::class::attribute::Attribute;
-use crate::class::classfile::{ClassFile, BytecodeFrame};
+use crate::class::classfile::{BytecodeFrame, ClassFile};
 use crate::class::frame::Frame;
 use crate::class::instance::Instance;
 use crate::class::method::{Argument, MethodType};
@@ -30,7 +30,6 @@ impl Trace<Self> for VTXObject {
             VTXObject::Class(_) => {},
             VTXObject::Instance(_) => {},
             VTXObject::Array(elements) => elements.1.trace(tracer),
-
         }
     }
 }
@@ -46,11 +45,9 @@ pub struct Vastatrix {
 impl Vastatrix {
     pub fn new(archive: ZipArchive<File>) -> Self {
         let mut heap = broom::Heap::default();
-        let lib = unsafe {
-           Library::new("./vtx-std/target/debug/libvtx_std.so").unwrap()
-        };
-        let mut class_handles = HashMap::new(); 
-        Self { heap, class_handles, instance_handles: vec![], archive, std: lib}
+        let lib = unsafe { Library::new("./vtx-std/target/debug/libvtx_std.so").unwrap() };
+        let mut class_handles = HashMap::new();
+        Self { heap, class_handles, instance_handles: vec![], archive, std: lib }
     }
 
     pub fn run(&mut self) { self.load(); }
@@ -58,6 +55,7 @@ impl Vastatrix {
     fn load(&mut self) {
         let std = loading::load_classes_from_std(&self.std);
         for classpath in std.keys() {
+            trace!("loading: {}", classpath);
             let handle = self.heap.insert_temp(VTXObject::Class(std.get(classpath).unwrap().to_owned()));
             self.class_handles.insert(classpath.to_string(), handle);
         }
@@ -184,10 +182,10 @@ impl Vastatrix {
     pub fn get_array(&mut self, index: usize) -> &mut (MethodType, Vec<Argument>) {
         println!("{}, {:?}", index, self.instance_handles);
         let handle = self.instance_handles.get(index).unwrap();
-          if let VTXObject::Array(elements) = self.heap.get_mut(handle).unwrap() {
-              return elements;
-          } else {
-              panic!("not an array!");
-          }
+        if let VTXObject::Array(elements) = self.heap.get_mut(handle).unwrap() {
+            return elements;
+        } else {
+            panic!("not an array!");
+        }
     }
 }

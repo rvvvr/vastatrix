@@ -401,8 +401,21 @@ impl Frame for BytecodeFrame {
                         ConstantsPoolInfo::Integer { bytes, } => {
                             self.stack.push_back(Argument::new(*bytes as i32, MethodType::Int));
                         },
-                        ConstantsPoolInfo::String { string_index } => {
-                        
+                        ConstantsPoolInfo::String { string_index, } => {
+                           if let ConstantsPoolInfo::Utf8 { bytes, .. } = &class.get_constant_pool()[*string_index as usize] {
+                                trace!("loading string constant: {}", bytes);
+                                let class_handle = running_in.load_or_get_class_handle("java/lang/String".to_string());
+                                let mut class = running_in.get_class(class_handle);
+                                let instance_ref = running_in.prepare_instance(&mut class); 
+                                let mut string_as_arr: Vec<Argument> = vec![];
+                                for char in bytes.chars() { 
+                                    string_as_arr.push(Argument::new(char as u32, MethodType::Char)); 
+                                }
+                                let array = running_in.create_array(string_as_arr, MethodType::Char);
+                                let args = vec![Argument::new(instance_ref, MethodType::ClassReference {classpath: "java/lang/String".to_string()} ), Argument::new(array, MethodType::ArrayReference)];
+                                let constructor_frame = class.create_frame("<init>".to_string(), "([C)V".to_string()).unwrap().exec(args, running_in);
+                                self.stack.push_back(Argument::new(instance_ref, MethodType::ClassReference { classpath: "java/lang/String".to_string()}));
+                           }
                         },
                         a => {
                             panic!("BAD! {:?}", a);
@@ -453,7 +466,7 @@ impl Frame for BytecodeFrame {
                     let arrayref = self.stack.pop_back().unwrap();
                     trace!("INSTRUCTION: iaload [arrayref: {:?}, index: {:?}]", arrayref, index);
                     self.stack.push_back(running_in.get_array(arrayref.into()).1[Into::<usize>::into(index)].clone());
-                }
+                },
                 0x36 => {
                     // istore index [value]
                     let value = self.stack.pop_back().unwrap();
@@ -491,7 +504,7 @@ impl Frame for BytecodeFrame {
                     let value = self.stack.pop_back().unwrap();
                     trace!("INSTRUCTION: astore_2 [value: {:?}]", value);
                     self.locals[2] = value;
-                }
+                },
                 0x4B => {
                     // astore_0 [value]
                     let value = self.stack.pop_back().unwrap();
@@ -556,11 +569,11 @@ impl Frame for BytecodeFrame {
                     self.ip += 2;
                 },
                 0xA7 => {
-                    //goto branchbyte1, branchbyte2;
+                    // goto branchbyte1, branchbyte2;
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
                     let branchbyte2 = self.code[(self.ip + 2) as usize];
                     trace!("INSTRUCTION: goto {} {}", branchbyte1, branchbyte2);
-                    self.ip = self.ip.checked_add_signed((((((branchbyte1 as u16) << 8) | branchbyte2 as u16)) as i16).into()).unwrap() - 1;
+                    self.ip = self.ip.checked_add_signed(((((branchbyte1 as u16) << 8) | branchbyte2 as u16) as i16).into()).unwrap() - 1;
                     // we subtract 1 because we add 1 at the end of the function
                 },
                 0xAC => {
@@ -572,13 +585,13 @@ impl Frame for BytecodeFrame {
                 0xA2 => {
                     // if_icmpge branchbyte1 branchbyte2 [value1, value2]
                     let value2 = self.stack.pop_back().unwrap();
-                    let value1 = self.stack.pop_back().unwrap(); 
+                    let value1 = self.stack.pop_back().unwrap();
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
                     let branchbyte2 = self.code[(self.ip + 2) as usize];
                     trace!("INSTRUCTION: if_icmpge {} {} [value1: {:?}, value2: {:?}]", branchbyte1, branchbyte2, value1, value2);
-                    if value1 >= value2 { 
+                    if value1 >= value2 {
                         self.ip += (((branchbyte1 as u32) << 8) | branchbyte2 as u32) - 1;
-                    } else { 
+                    } else {
                         self.ip += 2;
                     }
                 },
@@ -671,7 +684,7 @@ impl Frame for BytecodeFrame {
                     // invokespecial indexbyte1 indexbyte2 [objectref, aargs]
                     let indexbyte1 = self.code[(self.ip + 1) as usize];
                     let indexbyte2 = self.code[(self.ip + 2) as usize];
-                    let this_class = running_in.get_class(self.class_handle).clone(); 
+                    let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.get_constant_pool()[((indexbyte1 as usize) << 8) | indexbyte2 as usize];
                     if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
@@ -683,7 +696,7 @@ impl Frame for BytecodeFrame {
                         trace!("INSTRUCTION: invokevirtual {} {} [objectref: {:?}, aargs: {:?}]", indexbyte1, indexbyte2, objectref, meep);
                         let mut args = vec![objectref];
                         args.append(&mut meep);
-                        let back = method.exec(args, running_in); 
+                        let back = method.exec(args, running_in);
                         if !back.void() {
                             self.stack.push_back(back);
                         }
@@ -697,7 +710,7 @@ impl Frame for BytecodeFrame {
                     trace!("byte1: {}, byte2: {}, final: {}", indexbyte1, indexbyte2, ((indexbyte1 as usize) << 8) | indexbyte2 as usize);
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.get_constant_pool()[((indexbyte1 as usize) << 8) | indexbyte2 as usize]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
-                    //update: found out why. entry 0 is a "dummy reference". will change to reflect this.
+                    // update: found out why. entry 0 is a "dummy reference". will change to reflect this.
                     if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
                         let mut args: Vec<Argument> = vec![];
@@ -733,34 +746,34 @@ impl Frame for BytecodeFrame {
                     self.ip += 2;
                 },
                 0xBC => {
-                   // newarray atype [count] -> [ArrayReference]
-                   let count = self.stack.pop_back().unwrap();
-                   let array = vec![Argument::new(0 as i32, MethodType::Int); Into::<i32>::into(count.clone()) as usize]; 
-                   let atype = self.code[(self.ip + 1) as usize];
-                   trace!("INSTRUCTION: newarray {} [count: {:?}]", atype, count);
-                   let of: MethodType = match atype {
-                       4 => MethodType::Boolean,
-                       5 => MethodType::Char,
-                       6 => MethodType::Float,
-                       7 => MethodType::Double,
-                       8 => MethodType::Byte,
-                       9 => MethodType::Short,
-                       10 => MethodType::Int,
-                       11 => MethodType::Long,
-                       _ => {
-                           panic!("Array type not recognized!");
-                       }
-                   };
-                   let reference = running_in.create_array(array, of);
-                   self.stack.push_back(Argument::new(reference, MethodType::ArrayReference));
-                   self.ip += 1;
+                    // newarray atype [count] -> [ArrayReference]
+                    let count = self.stack.pop_back().unwrap();
+                    let array = vec![Argument::new(0 as i32, MethodType::Int); Into::<i32>::into(count.clone()) as usize];
+                    let atype = self.code[(self.ip + 1) as usize];
+                    trace!("INSTRUCTION: newarray {} [count: {:?}]", atype, count);
+                    let of: MethodType = match atype {
+                        4 => MethodType::Boolean,
+                        5 => MethodType::Char,
+                        6 => MethodType::Float,
+                        7 => MethodType::Double,
+                        8 => MethodType::Byte,
+                        9 => MethodType::Short,
+                        10 => MethodType::Int,
+                        11 => MethodType::Long,
+                        _ => {
+                            panic!("Array type not recognized!");
+                        },
+                    };
+                    let reference = running_in.create_array(array, of);
+                    self.stack.push_back(Argument::new(reference, MethodType::ArrayReference));
+                    self.ip += 1;
                 },
                 0xBE => {
                     // arraylength [arrayref] -> [Int]
                     let arrayref = self.stack.pop_back().unwrap();
-                    trace!("INSTRUCTION arraylength [arrayref: {:?}]", arrayref); 
+                    trace!("INSTRUCTION arraylength [arrayref: {:?}]", arrayref);
                     self.stack.push_back(Argument::new(running_in.get_array(arrayref.into()).1.len() as u32, MethodType::Int));
-                }
+                },
                 _ => {
                     panic!("Unimplemented opcode: 0x{:x}", op);
                 },
