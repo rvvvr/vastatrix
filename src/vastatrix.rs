@@ -120,7 +120,7 @@ impl Vastatrix {
         }
         let archive = &mut self.archive;
         info!("LOADING CLASS: {}", classpath.clone());
-        let mut class_file = archive.by_name(&(classpath.clone() + ".class")).expect("Could not find class file!");
+        let mut class_file = archive.by_name(&(classpath.clone() + ".class")).expect(format!("Could not find class file {}!", classpath.clone()).as_str());
         let mut class_buf: Vec<u8> = vec![];
         class_file.read_to_end(&mut class_buf).unwrap();
         let bytes = Bytes::from(class_buf);
@@ -180,7 +180,6 @@ impl Vastatrix {
     }
 
     pub fn get_array(&mut self, index: usize) -> &mut (MethodType, Vec<Argument>) {
-        println!("{}, {:?}", index, self.instance_handles);
         let handle = self.instance_handles.get(index).unwrap();
         if let VTXObject::Array(elements) = self.heap.get_mut(handle).unwrap() {
             return elements;

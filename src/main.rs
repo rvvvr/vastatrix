@@ -16,13 +16,13 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let file = File::open(cli.jar.as_deref().unwrap()).unwrap();
-    logging_setup();
+    logging_simple_setup();
     let archive = ZipArchive::new(file).unwrap();
     let mut vtx = Vastatrix::new(archive);
     vtx.run();
 }
 
-fn logging_setup() -> () {
+fn logging_fern_setup() -> Result<(), fern::InitError> {
     let colors_line =
         ColoredLevelConfig::new().error(Color::Red).warn(Color::Yellow).info(Color::White).debug(Color::White).trace(Color::BrightBlack);
 
@@ -38,6 +38,13 @@ fn logging_setup() -> () {
                          .level(log::LevelFilter::Warn)
                          .level_for("vastatrix", log::LevelFilter::Trace)
                          .chain(std::io::stdout())
+                         .chain(fern::log_file("output.log")?)
                          .apply()
                          .unwrap();
+                         Ok(())
+}
+
+
+fn logging_simple_setup() {
+    simple_logger::init().unwrap();
 }

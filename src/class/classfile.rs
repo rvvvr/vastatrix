@@ -356,6 +356,11 @@ impl Frame for BytecodeFrame {
             }
             drop(this_class);
             match op {
+                0x1 => {
+                    // aconst_null
+                    trace!("INSTRUCTION: aconst_null");
+                    self.stack.push_back(Argument::new(0, MethodType::Void));
+                }
                 0x2 => {
                     // iconst_m1
                     trace!("INSTRUCTION: iconst_m1");
@@ -391,6 +396,21 @@ impl Frame for BytecodeFrame {
                     trace!("INSTRUCTION: iconst_4");
                     self.stack.push_back(Argument::new(5, MethodType::Int));
                 },
+                0x10 => {
+                    // bipush byte 
+                    let byte = self.code[self.ip as usize + 1];
+                    trace!("INSTRUCTION: bipush {}", byte);
+                    self.stack.push_back(Argument::new(byte as u32, MethodType::Int));
+                    self.ip += 1;
+                },
+                0x11 => {
+                    // sipush byte1, byte2
+                    let byte1 = self.code[self.ip as usize + 1];
+                    let byte2 = self.code[self.ip as usize + 2];
+                    trace!("INSTRUCTION: sipush {} {}", byte1, byte2);
+                    self.stack.push_back(Argument::new(((byte1 as u32) << 8 | (byte2 as u32)), MethodType::Int));
+                    self.ip += 2;
+                }
                 0x12 => {
                     // ldc index
                     let index = self.code[self.ip as usize + 1];
@@ -417,6 +437,25 @@ impl Frame for BytecodeFrame {
                                 self.stack.push_back(Argument::new(instance_ref, MethodType::ClassReference { classpath: "java/lang/String".to_string()}));
                            }
                         },
+                        ConstantsPoolInfo::Class { name_index } => {
+                            if let ConstantsPoolInfo::Utf8 { length, bytes } = &class.get_constant_pool()[*name_index as usize] {
+                                let class_handle = running_in.load_or_get_class_handle("java/lang/Class".to_string());
+                                let mut class = running_in.get_class(class_handle);
+                                let instance_ref = running_in.prepare_instance(&mut class);
+                                let mut classpath_as_arr: Vec<Argument> = vec![];
+                                for char in bytes.chars() {
+                                    classpath_as_arr.push(Argument::new(char as u32, MethodType::Char));
+                                }
+                                let classpath_jarr = running_in.create_array(classpath_as_arr, MethodType::Char);
+                                let str_class_handle = running_in.load_or_get_class_handle("java/lang/String".to_string());
+                                let mut str_class = running_in.get_class(str_class_handle);
+                                let str_instance_ref = running_in.prepare_instance(&mut str_class);
+                                let args = vec![Argument::new(str_instance_ref, MethodType::ClassReference { classpath: "java/lang/String".to_string()}), Argument::new(classpath_jarr, MethodType::ArrayReference)];
+                                let constructor_frame = str_class.create_frame("<init>".to_string(), "([C)V".to_string()).unwrap().exec(args, running_in);
+                                running_in.get_instance(instance_ref.try_into().unwrap()).fields.insert("classpath".to_string(), Argument::new(str_instance_ref, MethodType::ClassReference { classpath: "java/lang/String".to_string() }));
+                                self.stack.push_back(Argument::new(instance_ref, MethodType::ClassReference { classpath: "java/lang/Class".to_string() }));
+                            }
+                        }
                         a => {
                             panic!("BAD! {:?}", a);
                         },
@@ -455,6 +494,11 @@ impl Frame for BytecodeFrame {
                     trace!("INSTRUCTION: aload_0");
                     self.stack.push_back(self.locals[0].clone());
                 },
+                0x2B => {
+                    // aload_1
+                    trace!("INSTRUCTION: aload_1");
+                    self.stack.push_back(self.locals[1].clone());
+                }
                 0x2C => {
                     // aload_2
                     trace!("INSTRUCTION: aload_2");
@@ -462,6 +506,13 @@ impl Frame for BytecodeFrame {
                 },
                 0x2E => {
                     // iaload [arrayref, index]
+                    let index = self.stack.pop_back().unwrap();
+                    let arrayref = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: iaload [arrayref: {:?}, index: {:?}]", arrayref, index);
+                    self.stack.push_back(running_in.get_array(arrayref.into()).1[Into::<usize>::into(index)].clone());
+                },
+                0x32 => {
+                    // aaload [arrayref, index]
                     let index = self.stack.pop_back().unwrap();
                     let arrayref = self.stack.pop_back().unwrap();
                     trace!("INSTRUCTION: iaload [arrayref: {:?}, index: {:?}]", arrayref, index);
@@ -499,6 +550,12 @@ impl Frame for BytecodeFrame {
                     trace!("INSTRUCTION: istore_3 [value: {:?}]", value);
                     self.locals[3] = value;
                 },
+                0x4C => {
+                    // astore_1 [value]
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: astore_1 [value: {:?}]", value);
+                    self.locals[1] = value;
+                }
                 0x4D => {
                     // astore_2 [value]
                     let value = self.stack.pop_back().unwrap();
@@ -522,14 +579,23 @@ impl Frame for BytecodeFrame {
                     trace!("INSTRUCTION: iastore [arrayref: {:?}, index: {:?}, value: {:?}]", array, index, value);
                     running_in.get_array(array).1[index] = value;
                 },
+                0x53 => {
+                    // aastore [arrayref, index, value]
+                    let value = self.stack.pop_back().unwrap();
+                    let index = Into::<usize>::into(self.stack.pop_back().unwrap());
+                    let array = Into::<usize>::into(self.stack.pop_back().unwrap());
+                    trace!("INSTRUCTION: aastore [arrayref: {:?}, index: {:?}, value: {:?}]", array, index, value);
+                    running_in.get_array(array).1[index] = value;
+                },
                 0x57 => {
                     // pop [value]
                     trace!("INSTRUCTION: pop [value: {:?}]", self.stack.pop_back().unwrap());
                 },
                 0x59 => {
                     // dup [value] -> [value, value]
-                    let value = &self.stack[0];
-                    trace!("INSTRUCTION: pop [value: {:?}]", value);
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: dup [value: {:?}]", value);
+                    self.stack.push_back(value.clone());
                     self.stack.push_back(value.clone());
                 },
                 0x60 => {
@@ -568,6 +634,30 @@ impl Frame for BytecodeFrame {
                     self.locals[index as usize] += cons_t as i32;
                     self.ip += 2;
                 },
+                0x99 => {
+                    // ifeq branchbyte1 branchbyte2 [value]
+                    let branchbyte1 = self.code[(self.ip + 1) as usize];
+                    let branchbyte2 = self.code[(self.ip + 2) as usize];
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: ifne {} {} [value: {:?}", branchbyte1, branchbyte2, value);
+                    if Into::<usize>::into(value) == 0 {
+                        self.ip = self.ip.checked_add_signed(((branchbyte1 as i32) << 8) | branchbyte2 as i32).unwrap() - 1;
+                    } else {
+                        self.ip += 2; 
+                    }
+                }
+                0x9a => {
+                    // ifne branchbyte1 branchbyte2 [value]
+                    let branchbyte1 = self.code[(self.ip + 1) as usize];
+                    let branchbyte2 = self.code[(self.ip + 2) as usize];
+                    let value = self.stack.pop_back().unwrap();
+                    trace!("INSTRUCTION: ifne {} {} [value: {:?}", branchbyte1, branchbyte2, value);
+                    if Into::<usize>::into(value) != 0 {
+                        self.ip = self.ip.checked_add_signed(((branchbyte1 as i32) << 8) | branchbyte2 as i32).unwrap() - 1;
+                    } else {
+                        self.ip += 2;
+                    }
+                }
                 0xA7 => {
                     // goto branchbyte1, branchbyte2;
                     let branchbyte1 = self.code[(self.ip + 1) as usize];
@@ -665,7 +755,10 @@ impl Frame for BytecodeFrame {
                     if let ConstantsPoolInfo::MethodRef { .. } = method_info {
                         let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
                         let mut meep: Vec<Argument> = vec![];
-                        for _ in desc.types {
+                        for t in desc.types {
+                            if let MethodType::ArrayReference = t {
+                                continue;
+                            } // TODO: Handle array args better. (Varargs?? maybe?? dunno)
                             meep.push(self.stack.pop_back().unwrap());
                         }
                         let objectref = self.stack.pop_back().unwrap();
@@ -711,8 +804,14 @@ impl Frame for BytecodeFrame {
                     let this_class = running_in.get_class(self.class_handle).clone();
                     let method_info = &this_class.get_constant_pool()[((indexbyte1 as usize) << 8) | indexbyte2 as usize]; // i have to asssume that indices in terms of the internals of the jvm start at 1, otherwise i have no idea why i'd have to subtract 1 here.
                     // update: found out why. entry 0 is a "dummy reference". will change to reflect this.
+                    let (mut method, desc);
                     if let ConstantsPoolInfo::MethodRef { .. } = method_info {
-                        let (mut method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
+                        (method, desc) = this_class.resolve_method(method_info.clone(), false, None, running_in);
+                    } else if let ConstantsPoolInfo::InterfaceMethodRef { class_index, name_and_type_index } = method_info {
+                        (method, desc) = this_class.resolve_method(ConstantsPoolInfo::MethodRef { class_index: *class_index, name_and_type_index: *name_and_type_index }, false, None, running_in);
+                    }  else {
+                        panic!("invokestatic was not a method reference! was a {:?}", method_info);
+                    }
                         let mut args: Vec<Argument> = vec![];
                         for _ in desc.types {
                             args.push(self.stack.pop_back().unwrap());
@@ -722,9 +821,7 @@ impl Frame for BytecodeFrame {
                         if !back.void() {
                             self.stack.push_back(back);
                         }
-                    } else {
-                        panic!("invokestatic was not a method reference!");
-                    }
+                    
                     self.ip += 2;
                 },
                 0xBB => {
@@ -768,6 +865,29 @@ impl Frame for BytecodeFrame {
                     self.stack.push_back(Argument::new(reference, MethodType::ArrayReference));
                     self.ip += 1;
                 },
+                0xBD => {
+                    // anewarray indexbyte1 indexbyte2 [count] -> [ArrayReference]
+                    let count = self.stack.pop_back().unwrap();
+                    let indexbyte1 = self.code[(self.ip + 1) as usize];
+                    let indexbyte2 = self.code[(self.ip + 2) as usize];
+                    trace!("INSTRUCTION: anewarray {} {} [count: {:?}]", indexbyte1, indexbyte2, count);
+                    let constants_index = (indexbyte1 as u32) << 8 | indexbyte2 as u32;
+                    let this_class = running_in.get_class(self.class_handle).clone();
+                    let class_info = &this_class.get_constant_pool()[constants_index as usize];
+                    if let ConstantsPoolInfo::Class { name_index, } = class_info {
+                        let name = &this_class.get_constant_pool()[*name_index as usize];
+                        if let ConstantsPoolInfo::Utf8 { length, bytes } = name {
+                            let array = vec![Argument::new(0, MethodType::ClassReference { classpath: bytes.to_string() }); Into::<usize>::into(count.clone()) as usize];
+                            let arreference = running_in.create_array(array, MethodType::ClassReference { classpath: bytes.to_string() });
+                            self.stack.push_back(Argument::new(arreference, MethodType::ArrayReference));
+                        } else {
+                            panic!("bad");
+                        }
+                    } else {
+                        panic!("bad");
+                    }
+                    self.ip += 2;
+                }
                 0xBE => {
                     // arraylength [arrayref] -> [Int]
                     let arrayref = self.stack.pop_back().unwrap();

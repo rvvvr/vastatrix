@@ -7,12 +7,12 @@ use syn::__private::ToTokens;
 use syn::ext::IdentExt;
 use syn::parse::Parse;
 use syn::{braced, parse_macro_input, Block, Ident, LitStr, Token};
-use vastatrix::class::method::Descriptor;
-use vastatrix::class::method::MethodType;
+use vastatrix::class::method::{Descriptor, MethodType};
 
 #[derive(Debug)]
 pub(crate) struct ClassData {
     pub classpath: String,
+    pub superclasspath: String,
     pub classname: String,
     pub methods:   ClassMethods,
     pub fields:    ClassFields,
@@ -47,6 +47,7 @@ pub(crate) mod keywords {
     syn::custom_keyword!(class);
     syn::custom_keyword!(field);
     syn::custom_keyword!(instance);
+    syn::custom_keyword!(superclass);
 }
 
 impl Parse for ClassData {
@@ -55,6 +56,7 @@ impl Parse for ClassData {
         let mut methods = ClassMethods { methods: HashMap::new(), };
         let mut fields = ClassFields { fields: HashMap::new(), };
         let mut classname = String::new();
+        let mut superclasspath = String::new();
         println!("{}", input);
         if input.peek(keywords::package) {
             input.parse::<keywords::package>()?; // parsing module
@@ -94,6 +96,27 @@ impl Parse for ClassData {
             let class_content;
             braced!(class_content in input);
 
+           
+            if class_content.peek(keywords::superclass) {
+                class_content.parse::<keywords::superclass>()?;
+
+                loop {
+                    if class_content.peek(Token![;]) {
+                        class_content.parse::<Token![;]>()?;
+                        break;
+                    }
+                    if class_content.peek(Token![.]) {
+                        class_content.parse::<Token![.]>()?;
+                        superclasspath.push('/');
+                        continue;
+                    }
+                    if class_content.peek(Ident::peek_any) {
+                        let module = class_content.call(Ident::parse_any)?;
+                        superclasspath.push_str(module.to_string().as_str());
+                    }
+                }
+            }
+
             // fields go here
             loop {
                 println!("Meep");
@@ -113,7 +136,10 @@ impl Parse for ClassData {
                             class_content.parse::<Token![;]>()?;
                             println!("Meep6");
                             if fields.fields.contains_key(&namelit.value()) {
-                                fields.fields.get_mut(&namelit.value()).expect("could not get field!").push(FieldData { javadesc: desclit.value(), instance: false, });
+                                fields.fields
+                                      .get_mut(&namelit.value())
+                                      .expect("could not get field!")
+                                      .push(FieldData { javadesc: desclit.value(), instance: false, });
                             } else {
                                 fields.fields.insert(namelit.value(), vec![FieldData { javadesc: desclit.value(), instance: false, }]);
                             }
@@ -135,10 +161,11 @@ impl Parse for ClassData {
                         let desclit = class_content.parse::<LitStr>()?;
                         let tokens = class_content.parse::<Block>()?;
                         if methods.methods.contains_key(&namelit.value()) {
-                            methods.methods
-                                   .get_mut(&namelit.value())
-                                   .expect("could not get method!")
-                                   .push(MethodData { javadesc: desclit.value(), logic: tokens.to_token_stream().into(), instance: false, });
+                            methods.methods.get_mut(&namelit.value()).expect("could not get method!").push(MethodData { javadesc: desclit.value(),
+                                                                                                                        logic:
+                                                                                                                            tokens.to_token_stream()
+                                                                                                                                  .into(),
+                                                                                                                        instance: false, });
                         } else {
                             methods.methods.insert(namelit.value(), vec![MethodData { javadesc: desclit.value(),
                                                                                       logic:    tokens.to_token_stream().into(),
@@ -153,7 +180,7 @@ impl Parse for ClassData {
             return Err(input.error("Class macro must start with package statement!"));
         }
         println!("{}", classpath);
-        Ok(ClassData { classpath, classname, methods, fields })
+        Ok(ClassData { classpath, superclasspath, classname, methods, fields })
     }
 }
 
@@ -200,6 +227,23 @@ pub fn class(input: TokenStream) -> TokenStream {
     {
         if classpath == "java/lang/Object" {
             super_class_index = 0;
+        } else if thing.superclasspath != String::new() {
+            super_class_index = constants_pool_count + 1;
+            let name_index = super_class_index + 1;
+            let superclass = thing.superclasspath;
+            let superclass_length = superclass.len() as u16;
+            constants_pool.append_all(vec![quote! {
+                                                , ConstantsPoolInfo::Class {
+                                                    name_index: #name_index,
+                                                }
+                                            },
+                                            quote! {
+                                                , ConstantsPoolInfo::Utf8 {
+                                                    length: #superclass_length,
+                                                    bytes: #superclass.to_string(),
+                                                }
+                                            }]);
+            constants_pool_count += 2;
         } else {
             // TODO: Implement superclasses
             super_class_index = constants_pool_count + 1;
@@ -239,12 +283,12 @@ pub fn class(input: TokenStream) -> TokenStream {
                 let desc_index = constants_pool_count;
                 let desc = &field.javadesc;
                 let desc_length = desc.len() as u16;
-                constants_pool.append_all(vec![quote!{
-                    , ConstantsPoolInfo::Utf8 {
-                        length: #desc_length,
-                        bytes: #desc.to_string(),
-                    }
-                }]);
+                constants_pool.append_all(vec![quote! {
+                                  , ConstantsPoolInfo::Utf8 {
+                                      length: #desc_length,
+                                      bytes: #desc.to_string(),
+                                  }
+                              }]);
                 fields.append_all(vec![quote! {
                           FieldInfo {
                               access_flags:     0,
@@ -287,16 +331,21 @@ pub fn class(input: TokenStream) -> TokenStream {
                 let mut rfname = rust_friendly_methodname.clone();
                 for t in descriptor.types {
                     if t == MethodType::ArrayReference {
-                       rfname.push_str("Array");
-                       continue;
+                        rfname.push_str("Array");
+                        continue;
                     }
-                    if let MethodType::ClassReference { ref classpath } = t {
+                    if let MethodType::ClassReference { ref classpath, } = t {
                         rfname.push_str(classpath.replace("/", "").as_str());
                         continue;
                     }
                     rfname.push_str(format!("{:?}", t).as_str());
                 }
-                rfname.push_str(format!("Ret{:?}", descriptor.returns.expect("could not get descriptor returns!")).as_str());
+                let returns = descriptor.returns.expect("could not get descriptor returns!");
+                if let MethodType::ClassReference { ref classpath, } = returns {
+                    rfname.push_str(format!("Ret{}", classpath.replace("/", "")).as_str());
+                } else {
+                    rfname.push_str(format!("Ret{:?}", returns).as_str());
+                }
                 rfname.push_str("Frame");
                 let rf_ident = Ident::new(rfname.as_str(), Span::call_site().into());
 
@@ -367,6 +416,7 @@ pub fn class(input: TokenStream) -> TokenStream {
     };
     println!("f");
     println!("{}", method_match);
+    constants_pool_count -= 1;
     let out = quote! {
         use vastatrix::{class::{definition::{Class, FieldInfo, MethodInfo}, frame::Frame, method::{Descriptor, Argument, MethodType}, ConstantsPoolInfo, attribute::Attribute}, vastatrix::Vastatrix, vastatrix::VTXObject};
         use broom::Handle;

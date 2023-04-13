@@ -42,15 +42,21 @@ impl Descriptor {
         let mut inclass = false;
         let mut types = vec![];
         let mut returns = None;
-        for cha in desc.chars() {
+        for cha in desc.chars() { 
                     if cha == ';' {
                         inclass = false;
                         continue;
                     }
                     if inclass {
-                        let length = types.len();
-                        if let MethodType::ClassReference { ref mut classpath } = types.get_mut(length - 1).unwrap() {
-                            classpath.push(cha);
+                        if inarg {
+                            let length = types.len();
+                            if let MethodType::ClassReference { ref mut classpath } = types.get_mut(length - 1).unwrap() {
+                                classpath.push(cha);
+                            }
+                        } else {
+                            if let Some(MethodType::ClassReference { ref mut classpath }) = returns {
+                                classpath.push(cha); 
+                            }
                         }
                         continue;
                     }
@@ -66,6 +72,9 @@ impl Descriptor {
                 'L' =>
                     if inarg {
                         types.push(MethodType::ClassReference { classpath: "".to_string(), });
+                        inclass = true;
+                    } else {
+                        returns = Some(MethodType::ClassReference { classpath: "".to_string(), });
                         inclass = true;
                     },
                 'I' =>
@@ -164,6 +173,7 @@ impl Descriptor {
                     } else {
                         if let None = returns {
                             returns = Some(MethodType::ArrayReference);
+                            break;
                         } else {
                             panic!("can only return one type!");
                         }
@@ -171,6 +181,9 @@ impl Descriptor {
                 _ => {
                 },
             }
+         
+           
+
         }
         Self { types, returns }
     }
