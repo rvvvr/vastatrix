@@ -1,0 +1,20 @@
+use std::collections::HashMap;
+
+use super::Class;
+
+pub struct Classpath {
+    root: HashMap<String, ClassNode>,
+}
+
+impl Classpath {
+    pub fn new() -> Self {
+	Self {
+	    root: HashMap::new(),
+	}
+    }
+}
+
+pub enum ClassNode {
+    Node(HashMap<String, ClassNode>),
+    Class(Box<dyn Class>),
+}
