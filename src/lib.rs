@@ -1,10 +1,12 @@
 #![deny(clippy::panic)]
+#![warn(clippy::todo)]
 
-use std::{sync::mpsc::Sender, path::PathBuf, io};
+use std::{sync::{Arc, mpsc::{Sender, Receiver, self}}, path::PathBuf, io, thread, process};
 
-use class::classpath::Classpath;
+use class::{classpath::Classpath, Class};
 use jar::{JarFile, JarError};
 use thiserror::Error;
+use vastatrick::Vastatrick;
 
 pub mod vastatrick;
 pub mod jar;
@@ -12,28 +14,64 @@ pub mod class;
 
 pub struct Vastatrix {
     classpath: Classpath,
+    request_reciever: Receiver<VastatrixRequest>,
+    request_sender: Sender<VastatrixRequest>,
 }
 
 impl Vastatrix {
     pub fn new() -> Self {
+	let (request_sender, request_reciever) = mpsc::channel();
 	Self {
 	    classpath: Classpath::new(),
+	    request_reciever,
+	    request_sender,
 	}
     }
 
-    pub fn go(&self, opt: LaunchOptions) -> Result<(), VastatrixError> {
+    pub fn go(&mut self, opt: LaunchOptions) -> Result<i32, VastatrixError> {
 	match opt.how {
 	    HowLaunch::JarFile(path) => {
-		let jar = JarFile::new(path)?;
-		
+		let mut jar = JarFile::new(path)?;
+		let meta = jar.grab_meta()?.clone();
+		jar.load_into_classpath(&mut self.classpath)?;
+		let vastatrick_sender = self.request_sender.clone();
+		thread::spawn(move || {
+		    let mut main_vastatrick = Vastatrick::new(vastatrick_sender);
+		    main_vastatrick.run_main_class(meta.main_class.unwrap());
+		});
 	    }
 	}
-	Ok(())
+	Ok(self.listen())
+    }
+
+    fn listen(&self) -> i32{
+	loop {
+	    let request = self.request_reciever.recv().unwrap();
+	    match request.kind {
+		VastatrixRequestKind::Exit(code) => {
+		    process::exit(code);
+		},
+		VastatrixRequestKind::ResolveClass(classpath) => {
+		    let class = self.classpath.resolve(classpath.as_str());
+		    println!("{classpath}");
+		    println!("{class:#?}");
+		    request.responder.send(VastatrixResponse::ResolvedClass(class)).unwrap();
+		}
+	    }
+	}
     }
 }
 
 pub struct LaunchOptions {
     how: HowLaunch,
+}
+
+impl LaunchOptions {
+    pub fn new(how: HowLaunch) -> Self {
+	Self {
+	    how,
+	}
+    }
 }
 
 pub enum HowLaunch {
@@ -56,16 +94,17 @@ pub enum VastatrixError {
 unsafe impl Send for VastatrixError {}
 
 pub struct VastatrixRequest {
-    responder: Sender<VastatrixResponse>,
+    responder: Arc<Sender<VastatrixResponse>>,
     kind: VastatrixRequestKind,
 }
 
 unsafe impl Send for VastatrixRequest {}
 
 pub enum VastatrixRequestKind {
-    
+    ResolveClass(String),
+    Exit(i32),
 }
 
 pub enum VastatrixResponse {
-    
+    ResolvedClass(Option<Arc<dyn Class>>),
 }

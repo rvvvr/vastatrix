@@ -17,10 +17,13 @@ impl Classpath {
 	}
     }
 
-    pub fn insert(mut self, path: &str, class: Arc<dyn Class>) -> Result<(), VastatrixError> {
+    pub fn insert(&mut self, path: &str, class: Arc<dyn Class>) {
 	self.root.insert(String::from(path), Arc::clone(&class));
-	Ok(())
     }
 
+    pub fn resolve(&self, path: &str) -> Option<Arc<dyn Class>> {
+	println!("{:?}", self.root.keys());
+	self.root.get(path).cloned()
+    }
 }
 
