@@ -1,6 +1,3 @@
-#![deny(clippy::panic)]
-#![warn(clippy::todo)]
-
 use std::{sync::{Arc, mpsc::{Sender, Receiver, self}}, path::PathBuf, io, thread, process};
 
 use class::{classpath::Classpath, Class};
@@ -53,8 +50,6 @@ impl Vastatrix {
 		},
 		VastatrixRequestKind::ResolveClass(classpath) => {
 		    let class = self.classpath.resolve(classpath.as_str());
-		    println!("{classpath}");
-		    println!("{class:#?}");
 		    request.responder.send(VastatrixResponse::ResolvedClass(class)).unwrap();
 		}
 	    }
@@ -93,6 +88,7 @@ pub enum VastatrixError {
 
 unsafe impl Send for VastatrixError {}
 
+#[derive(Debug)]
 pub struct VastatrixRequest {
     responder: Arc<Sender<VastatrixResponse>>,
     kind: VastatrixRequestKind,
@@ -100,11 +96,14 @@ pub struct VastatrixRequest {
 
 unsafe impl Send for VastatrixRequest {}
 
+#[derive(Debug)]
 pub enum VastatrixRequestKind {
     ResolveClass(String),
     Exit(i32),
 }
 
+#[derive(Debug)]
 pub enum VastatrixResponse {
     ResolvedClass(Option<Arc<dyn Class>>),
+    Nothing,
 }

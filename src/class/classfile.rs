@@ -1,11 +1,11 @@
 use byteorder::{ReadBytesExt, BigEndian};
 
-use crate::VastatrixError;
+use crate::{VastatrixError, VastatrixResponse, VastatrixRequest, VastatrixRequestKind};
 
 use super::{Class, ConstantPoolInfo, FieldInfo, MethodInfo, AttributeInfo, ExceptionTableEntry, LineNumberTableEntry, StackMapFrame, VerificationType, InnerClassEntry};
 use thiserror::Error;
 
-use std::io::{Read, self, BufRead};
+use std::{io::{Read, self, BufRead}};
 
 #[derive(Debug, Default)]
 pub struct ClassFile {
@@ -424,7 +424,8 @@ impl ClassFile {
 }
 
 impl Class for ClassFile {
-    
+    fn call_method(&self, method_name: String, method_descriptor: super::descriptor::MethodDescriptor, requester: &crate::vastatrick::VastatrickRequester) {
+    }
 }
     
 unsafe impl Send for ClassFile {}

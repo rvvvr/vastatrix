@@ -2,12 +2,17 @@ use std::{fmt::Debug, io::Read};
 
 use byteorder::{ReadBytesExt, BigEndian};
 
+use crate::{VastatrixResponse, VastatrixRequest, VastatrixRequestKind, vastatrick::VastatrickRequester};
+
+use self::descriptor::MethodDescriptor;
+
 pub mod classpath;
 pub mod classfile;
 pub mod descriptor;
 
+
 pub trait Class: Send + Debug {
-    
+    fn call_method(&self, method_name: String, method_descriptor: MethodDescriptor, requester: &VastatrickRequester);
 }
 
 #[derive(Debug)]

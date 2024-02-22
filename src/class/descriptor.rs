@@ -45,8 +45,8 @@ impl FieldDescriptor {
 
 #[derive(Debug)]
 pub struct MethodDescriptor {
-    parameters: Vec<FieldDescriptor>,
-    returns: Option<FieldDescriptor>,
+    pub parameters: Vec<FieldDescriptor>,
+    pub returns: Option<FieldDescriptor>,
 }
 
 impl MethodDescriptor {
